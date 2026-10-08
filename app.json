@@ -32,6 +32,13 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
+      ],
+      "expo-secure-store",
+     [
+        "expo-camera",
+        {
+          "cameraPermission": "LovableCar needs access to your camera to scan service documents."
+        }
       ]
     ],
     "experiments": {
