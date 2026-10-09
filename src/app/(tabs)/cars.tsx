@@ -76,12 +76,17 @@ export default function CarsScreen() {
           return (
             <Pressable
               key={car.id}
-              onPress={() => handleSelectCar(car.id)}
-              style={[
-                styles.carCard,
-                isSelected &&
-                  styles.selectedCarCard,
-              ]}
+              style={styles.carCard}
+              onPress={() => {
+                selectCar(car.id);
+
+                router.push({
+                  pathname: '/car/[id]',
+                  params: {
+                    id: car.id,
+                  },
+                });
+              }}
             >
               <View style={styles.carIcon}>
                 <Text style={styles.carEmoji}>

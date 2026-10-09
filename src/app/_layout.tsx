@@ -46,6 +46,18 @@ export default function RootLayout() {
           title: 'Add car',
         }}
       />
+
+      <Stack.Screen
+        name="car/[id]"
+        options={{
+          title: 'Car',
+        }}
+      />
+
+      <Stack.Screen
+        name="car/edit"
+        options={{ title: 'Edit car' }}
+      />
     </Stack>
   );
 }
