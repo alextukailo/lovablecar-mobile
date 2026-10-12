@@ -1,24 +1,27 @@
 
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useMemo } from 'react';
 import {
+    ActivityIndicator,
     Alert,
-    KeyboardAvoidingView,
-    Platform,
     Pressable,
     StyleSheet,
     Text,
     View,
 } from 'react-native';
 
+import { api } from '../../../lib/api';
+import { useCars } from '../../features/cars/hooks/useCars';
 import ServiceForm from '../../features/services/components/ServiceForm';
 import {
+    createEmptyServiceFormValues,
     getLocalDateString,
     type ServiceFormValues,
 } from '../../features/services/schemas/service.schema';
 import { useCarStore } from '../../store/car.store';
-import { useServiceStore } from '../../store/service.store';
 
-const supportedCurrencies = [
+const SUPPORTED_CURRENCIES = [
   'BYN',
   'USD',
   'EUR',
@@ -27,170 +30,439 @@ const supportedCurrencies = [
   'RUB',
 ] as const;
 
-function getParam(value?: string | string[]) {
-  return Array.isArray(value) ? value[0] : value;
+type SupportedCurrency =
+  (typeof SUPPORTED_CURRENCIES)[number];
+
+function getParam(
+  value?: string | string[],
+): string {
+  return Array.isArray(value)
+    ? value[0] ?? ''
+    : value ?? '';
 }
 
-function getSupportedCurrency(value?: string): ServiceFormValues['currency'] {
-  if (
-    value &&
-    supportedCurrencies.includes(
-      value as (typeof supportedCurrencies)[number],
-    )
-  ) {
-    return value as ServiceFormValues['currency'];
-  }
-
-  return 'BYN';
+function isSupportedCurrency(
+  value: string,
+): value is SupportedCurrency {
+  return SUPPORTED_CURRENCIES.includes(
+    value as SupportedCurrency,
+  );
 }
 
-export default function ReviewServiceScreen() {
+interface CreateServicePayload {
+  date: string;
+  mileage: number;
+  title: string;
+  cost: string;
+  currency: string;
+  workshop?: string;
+}
+
+export default function ScannerReviewScreen() {
   const params = useLocalSearchParams<{
-    uri?: string;
-    date?: string;
-    mileage?: string;
-    serviceName?: string;
-    totalCost?: string;
-    currency?: string;
-    workshop?: string;
+    uri?: string | string[];
+    vehicleId?: string | string[];
+    date?: string | string[];
+    mileage?: string | string[];
+    serviceName?: string | string[];
+    totalCost?: string | string[];
+    currency?: string | string[];
+    workshop?: string | string[];
   }>();
 
   const uri = getParam(params.uri);
+  const requestedVehicleId = getParam(
+    params.vehicleId,
+  );
+
+  const date = getParam(params.date);
+  const mileage = getParam(params.mileage);
+  const serviceName = getParam(
+    params.serviceName,
+  );
+  const totalCost = getParam(params.totalCost);
+  const currency = getParam(params.currency);
+  const workshop = getParam(params.workshop);
+
+  const queryClient = useQueryClient();
+
   const selectedCarId = useCarStore(
     (state) => state.selectedCarId,
   );
 
-  const selectedCar = useCarStore((state) =>
-    state.cars.find((car) => car.id === state.selectedCarId),
+  const selectCar = useCarStore(
+    (state) => state.selectCar,
   );
 
-  const updateCar = useCarStore(
-    (state) => state.updateCar,
+  const {
+    data: cars = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useCars();
+
+  // Prefer the car explicitly passed through OCR.
+  // Validate both IDs against PostgreSQL data.
+  const car = useMemo(() => {
+    const requestedCar = cars.find(
+      (item) =>
+        item.id === requestedVehicleId,
+    );
+
+    const storedCar = cars.find(
+      (item) => item.id === selectedCarId,
+    );
+
+    return (
+      requestedCar ??
+      storedCar ??
+      cars.find((item) => item.isPrimary) ??
+      cars[0] ??
+      null
+    );
+  }, [
+    cars,
+    requestedVehicleId,
+    selectedCarId,
+  ]);
+
+  const createService = useMutation({
+    mutationFn: async ({
+      carId,
+      payload,
+    }: {
+      carId: string;
+      payload: CreateServicePayload;
+    }) => {
+      const response = await api.post(
+        `/cars/${carId}/services`,
+        payload,
+      );
+
+      return response.data;
+    },
+
+    onSuccess: async (_result, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: [
+          'cars',
+          variables.carId,
+          'services',
+        ],
+      });
+
+      await queryClient.invalidateQueries({
+        queryKey: ['cars'],
+      });
+    },
+  });
+
+  const defaultValues = useMemo<ServiceFormValues>(
+    () => ({
+      ...createEmptyServiceFormValues(),
+      date: date || getLocalDateString(),
+      mileage:
+        mileage ||
+        (car ? String(car.mileage) : ''),
+      serviceName,
+      totalCost,
+      currency: isSupportedCurrency(currency)
+        ? currency
+        : 'BYN',
+      workshop,
+    }),
+    [
+      date,
+      mileage,
+      serviceName,
+      totalCost,
+      currency,
+      workshop,
+      car?.id,
+      car?.mileage,
+    ],
   );
 
-  const addService = useServiceStore(
-    (state) => state.addService,
-  );
-
-  const defaultValues: ServiceFormValues = {
-    date: getParam(params.date) || getLocalDateString(),
-    mileage:
-      getParam(params.mileage) ??
-      (selectedCar ? String(selectedCar.mileage) : ''),
-    serviceName: getParam(params.serviceName) ?? '',
-    totalCost: getParam(params.totalCost) ?? '0',
-    currency: getSupportedCurrency(getParam(params.currency)),
-    workshop: getParam(params.workshop) ?? '',
-  };
-
-  const handleConfirm = (values: ServiceFormValues) => {
-    if (!selectedCarId) {
+  const handleSubmit = async (
+    values: ServiceFormValues,
+  ) => {
+    if (!car) {
       Alert.alert(
-        'No car selected',
-        'Select a car before saving this service.',
+        'Car not found',
+        'Please select a car before saving this service.',
       );
       return;
     }
 
-    const mileage = Number(values.mileage);
-    const totalCost = Number(
+    const parsedMileage = Number(
+      values.mileage,
+    );
+
+    const parsedCost = Number(
       values.totalCost.replace(',', '.'),
     );
 
-    addService({
-      vehicleId: selectedCarId,
-      date: values.date,
-      mileage,
-      serviceName: values.serviceName.trim(),
-      totalCost,
-      currency: values.currency,
-      workshop: values.workshop.trim() || undefined,
-      documentUri: uri,
-    });
-
-    if (selectedCar && mileage > selectedCar.mileage) {
-      updateCar(selectedCarId, { mileage });
+    if (
+      !Number.isInteger(parsedMileage) ||
+      parsedMileage < 0
+    ) {
+      Alert.alert(
+        'Invalid mileage',
+        'Please enter a valid mileage.',
+      );
+      return;
     }
 
-    router.replace('/(tabs)/services');
+    if (
+      !Number.isFinite(parsedCost) ||
+      parsedCost < 0
+    ) {
+      Alert.alert(
+        'Invalid cost',
+        'Please enter a valid service cost.',
+      );
+      return;
+    }
+
+    const title = values.serviceName.trim();
+
+    if (!title) {
+      Alert.alert(
+        'Missing service',
+        'Please enter a service name.',
+      );
+      return;
+    }
+
+    const parsedDate = new Date(
+      `${values.date}T12:00:00`,
+    );
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      Alert.alert(
+        'Invalid date',
+        'Please enter a valid service date.',
+      );
+      return;
+    }
+
+    try {
+      await createService.mutateAsync({
+        carId: car.id,
+        payload: {
+          date: parsedDate.toISOString(),
+          mileage: parsedMileage,
+          title,
+          cost: parsedCost.toFixed(2),
+          currency: values.currency,
+          workshop:
+            values.workshop.trim() ||
+            undefined,
+        },
+      });
+
+      // Keep the car selected across screens.
+      // Zustand stores only its PostgreSQL ID.
+      selectCar(car.id);
+
+      router.replace('/(tabs)/services');
+    } catch (error) {
+      console.error(
+        'Failed to save scanned service:',
+        error,
+      );
+
+      Alert.alert(
+        'Unable to save service',
+        'The service was not saved. Please check your connection and try again.',
+      );
+    }
   };
 
-  if (!selectedCarId || !selectedCar) {
+  if (isLoading) {
     return (
-      <View style={styles.emptyState}>
-        <Text style={styles.title}>No car selected</Text>
+      <View style={styles.centered}>
+        <ActivityIndicator
+          size="large"
+          color="#246BFD"
+        />
+
         <Text style={styles.description}>
-          Select a car before reviewing the service record.
+          Loading car information...
+        </Text>
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.title}>
+          Unable to load cars
+        </Text>
+
+        <Text style={styles.description}>
+          Please check your connection.
         </Text>
 
         <Pressable
-          style={styles.button}
-          onPress={() => router.replace('/(tabs)/cars')}
+          onPress={() => void refetch()}
         >
-          <Text style={styles.buttonText}>Choose a car</Text>
+          <Text style={styles.link}>
+            Try again
+          </Text>
         </Pressable>
       </View>
     );
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.header}>
-        <Text style={styles.title}>Review service</Text>
+  if (!car) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.title}>
+          Car not found
+        </Text>
+
         <Text style={styles.description}>
-          Check the extracted details and correct anything that is wrong.
+          Return to your cars list and select
+          the vehicle for this service.
+        </Text>
+
+        <Text
+          style={styles.link}
+          onPress={() =>
+            router.replace('/(tabs)/cars')
+          }
+        >
+          Go to cars
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.screen}>
+      <View style={styles.header}>
+        <Text style={styles.title}>
+          Review service details
+        </Text>
+
+        <Text style={styles.description}>
+          Check the recognized values and correct
+          anything that is missing or inaccurate.
+          Nothing is saved until you confirm.
+        </Text>
+      </View>
+
+      <View style={styles.carCard}>
+        <Text style={styles.carLabel}>
+          SERVICE FOR
+        </Text>
+
+        <Text style={styles.carName}>
+          {car.make} {car.model} ({car.year})
+        </Text>
+
+        <Text style={styles.carMileage}>
+          Current mileage:{' '}
+          {car.mileage.toLocaleString()} km
         </Text>
       </View>
 
       <ServiceForm
-        key={selectedCarId}
+        key={`${car.id}:${uri}`}
         defaultValues={defaultValues}
-        submitLabel="Confirm and save"
-        onSubmit={handleConfirm}
+        submitLabel={
+          createService.isPending
+            ? 'Saving service...'
+            : 'Confirm and save service'
+        }
+        onSubmit={handleSubmit}
       />
-    </KeyboardAvoidingView>
+
+      {uri ? (
+        <Text style={styles.documentNote}>
+          The scanned document was used to
+          extract these values. The image itself
+          is not yet uploaded or attached to
+          the PostgreSQL service record.
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: '#F7F7F5',
+    backgroundColor: '#F5F6F8',
+    padding: 20,
   },
+
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    marginBottom: 20,
   },
+
   title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#171717',
+    color: '#252A34',
+    fontSize: 25,
+    fontWeight: '800',
   },
+
   description: {
-    marginTop: 8,
-    fontSize: 15,
+    color: '#737B89',
+    fontSize: 14,
     lineHeight: 21,
-    color: '#737373',
+    marginTop: 8,
   },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#F7F7F5',
+
+  carCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 22,
   },
-  button: {
-    marginTop: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: '#F5C400',
+
+  carLabel: {
+    color: '#737B89',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
-  buttonText: {
+
+  carName: {
+    color: '#252A34',
+    fontSize: 17,
     fontWeight: '700',
-    color: '#171717',
+    marginTop: 6,
+  },
+
+  carMileage: {
+    color: '#737B89',
+    fontSize: 13,
+    marginTop: 5,
+  },
+
+  documentNote: {
+    color: '#737B89',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 12,
+    marginBottom: 20,
+  },
+
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5F6F8',
+    padding: 24,
+  },
+
+  link: {
+    color: '#246BFD',
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 16,
   },
 });

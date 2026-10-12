@@ -1,3 +1,4 @@
+
 import { router } from 'expo-router';
 import {
     Pressable,
@@ -7,39 +8,163 @@ import {
     View,
 } from 'react-native';
 
-import { useServiceStore } from '@/store/service.store';
 import {
-    useCarStore,
-} from '../../store/car.store';
+    useCarMaintenanceSchedules,
+} from '../../../lib/maintenance.queries';
+
+import { useCars } from '../../features/cars/hooks/useCars';
+
+import MaintenanceStatusBadge from '../../features/maintenance/components/MaintenanceStatusBadge';
+
+import {
+    calculateMaintenanceOverview,
+} from '../../features/maintenance/utils/maintenance-overview';
+
+import {
+    getMaintenanceUrgency,
+} from '../../features/maintenance/utils/maintenance-urgency';
+
+import {
+    getMaintenanceUrgencyColors,
+} from '../../features/maintenance/utils/maintenance-theme';
+
+import { useCarStore } from '../../store/car.store';
+
+type MaintenanceSummaryProps = {
+  carId: string;
+  mileage: number;
+};
+
+function MaintenanceSummary({
+  carId,
+  mileage,
+}: MaintenanceSummaryProps) {
+  const {
+    data: schedules = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useCarMaintenanceSchedules(carId);
+
+  if (isLoading) {
+    return (
+      <Text style={styles.maintenanceLoading}>
+        Checking maintenance...
+      </Text>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Pressable
+        style={styles.maintenanceErrorContainer}
+        onPress={(event) => {
+          event.stopPropagation();
+          void refetch();
+        }}
+      >
+        <Text style={styles.maintenanceError}>
+          Could not load maintenance · Retry
+        </Text>
+      </Pressable>
+    );
+  }
+
+  const overview = calculateMaintenanceOverview(
+    schedules,
+    mileage,
+  );
+
+  const urgency = getMaintenanceUrgency(overview);
+
+  const urgencyColors = getMaintenanceUrgencyColors(
+    urgency.level,
+  );
+
+  const { counts } = overview;
+
+  return (
+    <View style={styles.maintenanceSection}>
+      <View style={styles.maintenanceWarnings}>
+        {counts.overdue > 0 && (
+          <MaintenanceStatusBadge
+            status="OVERDUE"
+            count={counts.overdue}
+          />
+        )}
+
+        {counts.dueSoon > 0 && (
+          <MaintenanceStatusBadge
+            status="DUE_SOON"
+            count={counts.dueSoon}
+          />
+        )}
+
+        {counts.overdue === 0 &&
+          counts.dueSoon === 0 &&
+          counts.configured > 0 && (
+            <MaintenanceStatusBadge status="OK" />
+          )}
+
+        {counts.unconfigured > 0 && (
+          <MaintenanceStatusBadge
+            status="NOT_CONFIGURED"
+            count={counts.unconfigured}
+          />
+        )}
+      </View>
+
+      <Text
+        style={[
+          styles.maintenanceSummaryText,
+          { color: urgencyColors.text },
+        ]}
+      >
+        {urgency.label}
+      </Text>
+    </View>
+  );
+}
 
 export default function CarsScreen() {
-  const cars = useCarStore(
-    (state) => state.cars,
-    );
+  const {
+    data: cars = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useCars();
 
-    const selectedCarId = useCarStore(
-        (state) => state.selectedCarId,
-    );
+  const storedSelectedCarId = useCarStore(
+    (state) => state.selectedCarId,
+  );
 
-    const selectedCar = cars.find(
-        (car) => car.id === selectedCarId,
-    );
-
-    const services = useServiceStore(
-        (state) => state.services,
-    );
-
-    const carServices = services.filter(
-    (service) =>
-        service.vehicleId === selectedCarId,
-    );
-    
   const selectCar = useCarStore(
     (state) => state.selectCar,
   );
 
-  const handleSelectCar = (id: string) => {
-    selectCar(id);
+  // Use the stored selection only if that car
+  // still exists in the PostgreSQL response.
+  const selectedCarExists = cars.some(
+    (car) => car.id === storedSelectedCarId,
+  );
+
+  const selectedCarId = selectedCarExists
+    ? storedSelectedCarId
+    : (
+        cars.find((car) => car.isPrimary)?.id ??
+        cars[0]?.id ??
+        null
+      );
+
+  const handleSelectCar = (carId: string) => {
+    selectCar(carId);
+
+    router.push({
+      pathname: '/car/[id]',
+      params: {
+        id: carId,
+      },
+    });
   };
 
   return (
@@ -50,7 +175,9 @@ export default function CarsScreen() {
       >
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>My cars</Text>
+            <Text style={styles.title}>
+              My cars
+            </Text>
 
             <Text style={styles.subtitle}>
               Manage your vehicles
@@ -69,6 +196,30 @@ export default function CarsScreen() {
           </Pressable>
         </View>
 
+        {isLoading && (
+          <Text style={styles.statusText}>
+            Loading cars...
+          </Text>
+        )}
+
+        {isError && (
+          <Pressable
+            onPress={() => void refetch()}
+          >
+            <Text style={styles.errorText}>
+              Could not load cars. Tap to retry.
+            </Text>
+          </Pressable>
+        )}
+
+        {!isLoading &&
+          !isError &&
+          cars.length === 0 && (
+            <Text style={styles.statusText}>
+              No cars yet. Add your first car.
+            </Text>
+          )}
+
         {cars.map((car) => {
           const isSelected =
             car.id === selectedCarId;
@@ -76,17 +227,11 @@ export default function CarsScreen() {
           return (
             <Pressable
               key={car.id}
-              style={styles.carCard}
-              onPress={() => {
-                selectCar(car.id);
-
-                router.push({
-                  pathname: '/car/[id]',
-                  params: {
-                    id: car.id,
-                  },
-                });
-              }}
+              style={[
+                styles.carCard,
+                isSelected && styles.selectedCarCard,
+              ]}
+              onPress={() => handleSelectCar(car.id)}
             >
               <View style={styles.carIcon}>
                 <Text style={styles.carEmoji}>
@@ -103,9 +248,7 @@ export default function CarsScreen() {
                   {isSelected && (
                     <View style={styles.selectedBadge}>
                       <Text
-                        style={
-                          styles.selectedBadgeText
-                        }
+                        style={styles.selectedBadgeText}
                       >
                         Selected
                       </Text>
@@ -123,6 +266,11 @@ export default function CarsScreen() {
                 <Text style={styles.carMileage}>
                   {car.mileage.toLocaleString()} km
                 </Text>
+
+                <MaintenanceSummary
+                  carId={car.id}
+                  mileage={car.mileage}
+                />
               </View>
             </Pressable>
           );
@@ -225,6 +373,7 @@ const styles = StyleSheet.create({
   carTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
   },
 
   carTitle: {
@@ -259,6 +408,37 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 
+  maintenanceSection: {
+    marginTop: 10,
+  },
+
+  maintenanceWarnings: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+
+  maintenanceSummaryText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 6,
+  },
+
+  maintenanceLoading: {
+    fontSize: 12,
+    color: '#A3A3A3',
+    marginTop: 10,
+  },
+
+  maintenanceErrorContainer: {
+    marginTop: 10,
+  },
+
+  maintenanceError: {
+    fontSize: 12,
+    color: '#B91C1C',
+  },
+
   addCarButton: {
     height: 54,
     borderRadius: 16,
@@ -274,5 +454,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#171717',
+  },
+
+  statusText: {
+    fontSize: 14,
+    color: '#737373',
+    marginBottom: 16,
+  },
+
+  errorText: {
+    fontSize: 14,
+    color: '#B91C1C',
+    marginBottom: 16,
   },
 });

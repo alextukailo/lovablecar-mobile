@@ -1,6 +1,8 @@
 
 import { router, useLocalSearchParams } from 'expo-router';
 import {
+    ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -10,43 +12,110 @@ import {
 } from 'react-native';
 
 import CarForm from '../../features/cars/components/CarForm';
+import {
+    useCar,
+    useUpdateCar,
+} from '../../features/cars/hooks/useCars';
 import type { CarFormValues } from '../../features/cars/schemas/car.schema';
-import { useCarStore } from '../../store/car.store';
 
 export default function EditCarScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string }>();
+  const id = typeof params.id === 'string' ? params.id : undefined;
 
-  const car = useCarStore((state) =>
-    state.cars.find((item) => item.id === id),
-  );
+  const {
+    data: car,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useCar(id);
 
-  const updateCar = useCarStore((state) => state.updateCar);
+  const updateCar = useUpdateCar();
 
-  if (!car) {
+  const handleUpdate = async (values: CarFormValues) => {
+    if (!car || updateCar.isPending) {
+      return;
+    }
+
+    try {
+      await updateCar.mutateAsync({
+        id: car.id,
+        data: {
+          make: values.make.trim(),
+          model: values.model.trim(),
+          year: Number(values.year),
+          engine: values.engine.trim() || undefined,
+          mileage: Number(values.mileage),
+          vin: values.vin.trim().toUpperCase() || undefined,
+          licensePlate: values.licensePlate.trim() || undefined,
+        },
+      });
+
+      router.back();
+    } catch (error) {
+      Alert.alert(
+        'Could not save changes',
+        error instanceof Error
+          ? error.message
+          : 'An unexpected error occurred.',
+      );
+    }
+  };
+
+  if (isLoading) {
     return (
       <View style={styles.notFound}>
-        <Text style={styles.notFoundTitle}>Car not found</Text>
+        <ActivityIndicator size="large" color="#F5C400" />
+        <Text style={styles.statusText}>
+          Loading car...
+        </Text>
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={styles.notFound}>
+        <Text style={styles.notFoundTitle}>
+          Could not load car
+        </Text>
+
+        <Text style={styles.statusText}>
+          {error instanceof Error
+            ? error.message
+            : 'Please check your connection.'}
+        </Text>
+
+        <Pressable onPress={() => void refetch()}>
+          <Text style={styles.actionText}>
+            Try again
+          </Text>
+        </Pressable>
 
         <Pressable onPress={() => router.back()}>
-          <Text style={styles.cancelText}>Go back</Text>
+          <Text style={styles.cancelText}>
+            Go back
+          </Text>
         </Pressable>
       </View>
     );
   }
 
-  const handleUpdate = (values: CarFormValues) => {
-    updateCar(car.id, {
-      make: values.make.trim(),
-      model: values.model.trim(),
-      year: Number(values.year),
-      engine: values.engine.trim() || undefined,
-      mileage: Number(values.mileage),
-      vin: values.vin.trim().toUpperCase() || undefined,
-      licensePlate: values.licensePlate.trim() || undefined,
-    });
+  if (!car) {
+    return (
+      <View style={styles.notFound}>
+        <Text style={styles.notFoundTitle}>
+          Car not found
+        </Text>
 
-    router.back();
-  };
+        <Pressable onPress={() => router.back()}>
+          <Text style={styles.cancelText}>
+            Go back
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -54,8 +123,13 @@ export default function EditCarScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.cancelText}>Cancel</Text>
+        <Pressable
+          onPress={() => router.back()}
+          disabled={updateCar.isPending}
+        >
+          <Text style={styles.cancelText}>
+            Cancel
+          </Text>
         </Pressable>
       </View>
 
@@ -70,7 +144,11 @@ export default function EditCarScreen() {
           vin: car.vin ?? '',
           licensePlate: car.licensePlate ?? '',
         }}
-        submitLabel="Save changes"
+        submitLabel={
+          updateCar.isPending
+            ? 'Saving changes...'
+            : 'Save changes'
+        }
         onSubmit={handleUpdate}
       />
     </KeyboardAvoidingView>
@@ -95,11 +173,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
+    paddingHorizontal: 24,
     backgroundColor: '#F7F7F5',
   },
   notFoundTitle: {
     fontSize: 20,
     fontWeight: '700',
+    color: '#171717',
+  },
+  statusText: {
+    fontSize: 14,
+    color: '#737373',
+    textAlign: 'center',
+  },
+  actionText: {
+    fontSize: 15,
+    fontWeight: '600',
     color: '#171717',
   },
 });

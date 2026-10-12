@@ -1,5 +1,12 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+
 import {
+    useMutation,
+    useQuery,
+    useQueryClient,
+} from '@tanstack/react-query';
+import { router, useLocalSearchParams } from 'expo-router';
+import {
+    ActivityIndicator,
     Alert,
     Pressable,
     ScrollView,
@@ -8,285 +15,570 @@ import {
     View,
 } from 'react-native';
 
-import { useCarStore } from '../../store/car.store';
-import { useServiceStore } from '../../store/service.store';
+import { api } from '../../../lib/api';
+import { useCar } from '../../features/cars/hooks/useCars';
 
-function formatDate(value: string): string {
-  const date = new Date(`${value}T00:00:00`);
+interface ApiServiceRecord {
+  id: string;
+  carId: string;
+  date: string;
+  mileage: number;
+  title: string;
+  description?: string | null;
+  cost?: string | number | null;
+  currency: string;
+  workshop?: string | null;
+  createdAt: string;
+}
 
-  if (Number.isNaN(date.getTime())) {
+function firstParam(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+async function fetchService(
+  carId: string,
+  serviceId: string,
+): Promise<ApiServiceRecord> {
+  const response = await api.get<ApiServiceRecord>(
+    `/cars/${carId}/services/${serviceId}`,
+  );
+
+  return response.data;
+}
+
+async function deleteService(
+  carId: string,
+  serviceId: string,
+): Promise<void> {
+  await api.delete(
+    `/cars/${carId}/services/${serviceId}`,
+  );
+}
+
+function formatDate(value: string) {
+  const parsed = new Date(
+    `${value.slice(0, 10)}T00:00:00`,
+  );
+
+  if (Number.isNaN(parsed.getTime())) {
     return value;
   }
 
-  return date.toLocaleDateString();
+  return parsed.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatCost(
+  value: string | number | null | undefined,
+): string {
+  if (value === null || value === undefined) {
+    return 'Not specified';
+  }
+
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount)) {
+    return 'Not specified';
+  }
+
+  return amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 export default function ServiceDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+    carId?: string | string[];
+    vehicleId?: string | string[];
+  }>();
 
-  const service = useServiceStore((state) =>
-    state.services.find((item) => item.id === id),
-  );
-  const removeService = useServiceStore(
-    (state) => state.removeService,
-  );
-  const car = useCarStore((state) =>
-    state.cars.find(
-      (item) => item.id === service?.vehicleId,
-    ),
-  );
+  const serviceId = firstParam(params.id);
+
+  const carId =
+    firstParam(params.carId) ??
+    firstParam(params.vehicleId);
+
+  const queryClient = useQueryClient();
+
+  const serviceQuery = useQuery({
+    queryKey: ['cars', carId, 'services', serviceId],
+    queryFn: () => fetchService(carId!, serviceId!),
+    enabled: Boolean(carId && serviceId),
+  });
+
+  const service = serviceQuery.data;
+
+  const carQuery = useCar(carId);
+
+  const deleteMutation = useMutation({
+    mutationFn: () => {
+      if (!carId || !serviceId) {
+        throw new Error('Missing car or service ID');
+      }
+
+      return deleteService(carId, serviceId);
+    },
+
+    onSuccess: async () => {
+      queryClient.removeQueries({
+        queryKey: [
+          'cars',
+          carId,
+          'services',
+          serviceId,
+        ],
+      });
+
+      await queryClient.invalidateQueries({
+        queryKey: ['cars', carId, 'services'],
+      });
+    },
+  });
 
   const handleDelete = () => {
-    if (!service) return;
+    if (!service || deleteMutation.isPending) {
+      return;
+    }
 
     Alert.alert(
       'Delete service record?',
-      'This action cannot be undone.',
+      `Delete "${service.title}"? This action cannot be undone.`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            removeService(service.id);
-            router.replace('/(tabs)/services');
+          onPress: async () => {
+            try {
+              await deleteMutation.mutateAsync();
+
+              router.replace({
+                pathname: '/car/[id]',
+                params: { id: service.carId },
+              });
+            } catch (error) {
+              Alert.alert(
+                'Could not delete service',
+                error instanceof Error
+                  ? error.message
+                  : 'An unexpected error occurred.',
+              );
+            }
           },
         },
       ],
     );
   };
 
-  if (!service) {
+  if (!carId || !serviceId) {
     return (
-      <View style={styles.center}>
-        <Stack.Screen options={{ title: 'Service details' }} />
-        <Text style={styles.title}>Service not found</Text>
-        <Text style={styles.muted}>
-          This record may have been deleted.
+      <EmptyState
+        title="Missing service information"
+        description="Open a service record from its car's service history."
+      />
+    );
+  }
+
+  if (serviceQuery.isLoading) {
+    return (
+      <View style={styles.emptyContainer}>
+        <ActivityIndicator
+          size="large"
+          color="#F5C400"
+        />
+
+        <Text style={styles.emptyDescription}>
+          Loading service...
         </Text>
+      </View>
+    );
+  }
+
+  if (serviceQuery.isError) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyTitle}>
+          Could not load service
+        </Text>
+
+        <Text style={styles.emptyDescription}>
+          {serviceQuery.error instanceof Error
+            ? serviceQuery.error.message
+            : 'Please check your connection.'}
+        </Text>
+
         <Pressable
           style={styles.primaryButton}
-          onPress={() => router.replace('/(tabs)/services')}
+          onPress={() => void serviceQuery.refetch()}
         >
           <Text style={styles.primaryButtonText}>
-            Back to service history
+            Try again
           </Text>
         </Pressable>
       </View>
     );
   }
 
+  if (!service) {
+    return (
+      <EmptyState
+        title="Service not found"
+        description="This service may have been deleted."
+      />
+    );
+  }
+
+  const car = carQuery.data;
+
+  const costText =
+    service.cost === null ||
+    service.cost === undefined
+      ? 'Not specified'
+      : `${formatCost(service.cost)} ${
+          service.currency || 'BYN'
+        }`;
+
   return (
-    <>
-      <Stack.Screen options={{ title: 'Service details' }} />
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.header}>
+        <Text style={styles.eyebrow}>
+          SERVICE RECORD
+        </Text>
 
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={styles.content}
-      >
-        <View style={styles.card}>
-          <Text style={styles.eyebrow}>MAINTENANCE RECORD</Text>
-          <Text style={styles.title}>{service.serviceName}</Text>
-          <Text style={styles.muted}>
-            {formatDate(service.date)}
-          </Text>
+        <Text style={styles.title}>
+          {service.title}
+        </Text>
 
-          <View style={styles.costBlock}>
-            <Text style={styles.costLabel}>Total cost</Text>
-            <Text style={styles.cost}>
-              {service.totalCost.toLocaleString()} {service.currency}
-            </Text>
-          </View>
-        </View>
+        <Text style={styles.date}>
+          {formatDate(service.date)}
+        </Text>
+      </View>
 
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Vehicle</Text>
-          <InfoRow
-            label="Car"
-            value={
-              car
-                ? `${car.make} ${car.model} (${car.year})`
-                : 'Vehicle unavailable'
-            }
-          />
-          <InfoRow
-            label="Mileage"
-            value={`${service.mileage.toLocaleString()} km`}
-          />
-        </View>
+      <View style={styles.costCard}>
+        <Text style={styles.costLabel}>
+          TOTAL COST
+        </Text>
 
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Service information</Text>
-          <InfoRow
-            label="Date"
-            value={formatDate(service.date)}
-          />
-          <InfoRow
-            label="Service"
-            value={service.serviceName}
-          />
-          <InfoRow
-            label="Workshop"
-            value={service.workshop?.trim() || 'Not specified'}
-          />
-          <InfoRow
-            label="Document"
-            value={
-              service.documentUri
-                ? 'Document attached'
-                : 'No document attached'
-            }
-          />
-        </View>
+        <Text style={styles.costValue}>
+          {costText}
+        </Text>
+      </View>
 
-        <Pressable
-          style={styles.primaryButton}
-          onPress={() =>
-            router.push({
-              pathname: '/service/edit',
-              params: { id: service.id },
-            })
+      <Text style={styles.sectionTitle}>
+        VEHICLE
+      </Text>
+
+      <View style={styles.infoCard}>
+        <InfoRow
+          label="Car"
+          value={
+            car
+              ? `${car.make} ${car.model}`
+              : carQuery.isLoading
+                ? 'Loading...'
+                : 'Car unavailable'
           }
-        >
-          <Text style={styles.primaryButtonText}>
-            Edit service
-          </Text>
-        </Pressable>
+        />
 
-        <Pressable
-          style={styles.deleteButton}
-          onPress={handleDelete}
-        >
-          <Text style={styles.deleteButtonText}>
-            Delete service
-          </Text>
-        </Pressable>
-      </ScrollView>
-    </>
+        {car && (
+          <InfoRow
+            label="Year"
+            value={String(car.year)}
+          />
+        )}
+
+        <InfoRow
+          label="Mileage at service"
+          value={`${service.mileage.toLocaleString()} km`}
+          last
+        />
+      </View>
+
+      <Text style={styles.sectionTitle}>
+        SERVICE DETAILS
+      </Text>
+
+      <View style={styles.infoCard}>
+        <InfoRow
+          label="Service"
+          value={service.title}
+        />
+
+        <InfoRow
+          label="Date"
+          value={formatDate(service.date)}
+        />
+
+        <InfoRow
+          label="Mileage"
+          value={`${service.mileage.toLocaleString()} km`}
+        />
+
+        <InfoRow
+          label="Cost"
+          value={costText}
+        />
+
+        <InfoRow
+          label="Workshop"
+          value={service.workshop || '—'}
+          last={!service.description}
+        />
+
+        {service.description ? (
+          <InfoRow
+            label="Description"
+            value={service.description}
+            last
+          />
+        ) : null}
+      </View>
+
+      <Pressable
+        style={styles.editButton}
+        onPress={() =>
+          router.push({
+            pathname: '/service/edit',
+            params: {
+              id: service.id,
+              carId: service.carId,
+            },
+          })
+        }
+      >
+        <Text style={styles.editButtonText}>
+          Edit service
+        </Text>
+      </Pressable>
+
+      <Pressable
+        style={styles.deleteButton}
+        onPress={handleDelete}
+        disabled={deleteMutation.isPending}
+      >
+        <Text style={styles.deleteButtonText}>
+          {deleteMutation.isPending
+            ? 'Deleting service...'
+            : 'Delete service'}
+        </Text>
+      </Pressable>
+
+      <View style={styles.bottomSpace} />
+    </ScrollView>
+  );
+}
+
+function EmptyState({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyTitle}>
+        {title}
+      </Text>
+
+      <Text style={styles.emptyDescription}>
+        {description}
+      </Text>
+
+      <Pressable
+        style={styles.primaryButton}
+        onPress={() => router.replace('/(tabs)/cars')}
+      >
+        <Text style={styles.primaryButtonText}>
+          Back to cars
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
 function InfoRow({
   label,
   value,
+  last = false,
 }: {
   label: string;
   value: string;
+  last?: boolean;
 }) {
   return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
+    <View
+      style={[
+        styles.infoRow,
+        last && styles.infoRowLast,
+      ]}
+    >
+      <Text style={styles.infoLabel}>
+        {label}
+      </Text>
+
+      <Text style={styles.infoValue}>
+        {value}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  container: {
     flex: 1,
-    backgroundColor: '#F5F6F8',
+    backgroundColor: '#F7F7F5',
   },
   content: {
-    padding: 16,
-    gap: 14,
-    paddingBottom: 32,
+    padding: 20,
+    paddingTop: 24,
   },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    gap: 12,
-    backgroundColor: '#F5F6F8',
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    gap: 12,
+  header: {
+    marginBottom: 20,
   },
   eyebrow: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1,
-    color: '#737B87',
+    color: '#737373',
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#17202A',
-  },
-  muted: {
-    fontSize: 14,
-    color: '#737B87',
-  },
-  costBlock: {
+    fontSize: 27,
+    fontWeight: '800',
+    color: '#171717',
     marginTop: 8,
-    paddingTop: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#DDE1E6',
-    gap: 4,
+  },
+  date: {
+    fontSize: 14,
+    color: '#737373',
+    marginTop: 6,
+  },
+  costCard: {
+    backgroundColor: '#171717',
+    borderRadius: 20,
+    padding: 22,
   },
   costLabel: {
-    color: '#737B87',
-    fontSize: 13,
-  },
-  cost: {
-    fontSize: 26,
+    fontSize: 11,
     fontWeight: '700',
-    color: '#208AEF',
+    letterSpacing: 1,
+    color: '#A3A3A3',
+  },
+  costValue: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginTop: 8,
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#17202A',
-    marginBottom: 2,
+    letterSpacing: 1,
+    color: '#737373',
+    marginTop: 28,
+    marginBottom: 10,
   },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 16,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E8EAED',
-  },
-  infoLabel: {
-    flex: 1,
-    color: '#737B87',
-    fontSize: 14,
-  },
-  infoValue: {
-    flex: 1.5,
-    color: '#17202A',
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'right',
-  },
-  primaryButton: {
-    backgroundColor: '#208AEF',
-    borderRadius: 12,
-    minHeight: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
+  infoCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
     paddingHorizontal: 16,
   },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
+  infoRow: {
+    minHeight: 52,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
   },
-  deleteButton: {
-    borderRadius: 12,
-    minHeight: 48,
+  infoRowLast: {
+    borderBottomWidth: 0,
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: '#737373',
+    flexShrink: 0,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#171717',
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  editButton: {
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: '#F5C400',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 24,
+  },
+  editButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#171717',
+  },
+  deleteButton: {
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#D92D20',
+    borderColor: '#FECACA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
   },
   deleteButtonText: {
-    color: '#D92D20',
-    fontWeight: '600',
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  emptyContainer: {
+    flex: 1,
+    backgroundColor: '#F7F7F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#171717',
+    textAlign: 'center',
+  },
+  emptyDescription: {
+    fontSize: 14,
+    color: '#737373',
+    marginTop: 8,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  primaryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 15,
+    backgroundColor: '#F5C400',
+    borderRadius: 14,
+  },
+  primaryButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#171717',
+  },
+  bottomSpace: {
+    height: 30,
   },
 });

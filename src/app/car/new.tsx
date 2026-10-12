@@ -1,6 +1,7 @@
-
 import { router } from 'expo-router';
+import { useState } from 'react';
 import {
+    Alert,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -10,25 +11,41 @@ import {
 } from 'react-native';
 
 import CarForm from '../../features/cars/components/CarForm';
+import { useCreateCar } from '../../features/cars/hooks/useCars';
 import type { CarFormValues } from '../../features/cars/schemas/car.schema';
-import { useCarStore } from '../../store/car.store';
 
 export default function NewCarScreen() {
-  const addCar = useCarStore((state) => state.addCar);
+  const createCarMutation = useCreateCar();
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleCreate = (values: CarFormValues) => {
-    addCar({
-      make: values.make.trim(),
-      model: values.model.trim(),
-      year: Number(values.year),
-      engine: values.engine.trim() || undefined,
-      mileage: Number(values.mileage),
-      vin: values.vin.trim().toUpperCase() || undefined,
-      licensePlate: values.licensePlate.trim() || undefined,
-      isPrimary: false,
-    });
+  const handleCreate = async (values: CarFormValues) => {
+    if (submitting) return;
 
-    router.back();
+    setSubmitting(true);
+
+    try {
+      await createCarMutation.mutateAsync({
+        make: values.make.trim(),
+        model: values.model.trim(),
+        year: Number(values.year),
+        engine: values.engine.trim() || undefined,
+        mileage: Number(values.mileage),
+        vin: values.vin.trim().toUpperCase() || undefined,
+        licensePlate: values.licensePlate.trim() || undefined,
+        isPrimary: false,
+      });
+
+      router.back();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to create car';
+
+      Alert.alert('Could not add car', message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -43,7 +60,7 @@ export default function NewCarScreen() {
       </View>
 
       <CarForm
-        submitLabel="Add car"
+        submitLabel={submitting ? 'Adding car...' : 'Add car'}
         onSubmit={handleCreate}
       />
     </KeyboardAvoidingView>

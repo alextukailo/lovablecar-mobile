@@ -1,91 +1,102 @@
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import {
+    createJSONStorage,
+    persist,
+} from 'zustand/middleware';
 
-export interface LocalCar {
-  id: string;
-  make: string;
-  model: string;
-  year: number;
-  engine?: string;
-  vin?: string;
-  licensePlate?: string;
-  mileage: number;
-  isPrimary: boolean;
-}
+/**
+ * Shared UI state for the Cars feature.
+ *
+ * Car and service records are stored in PostgreSQL
+ * and fetched through TanStack Query.
+ *
+ * This store contains only client-side preferences.
+ */
+
+export type CarSortOrder =
+  | 'newest'
+  | 'oldest'
+  | 'make'
+  | 'mileage';
 
 interface CarStore {
-  cars: LocalCar[];
   selectedCarId: string | null;
 
-  addCar: (car: Omit<LocalCar, 'id'>) => void;
-  updateCar: (id: string, updates: Partial<LocalCar>) => void;
-  selectCar: (id: string) => void;
-  removeCar: (id: string) => void;
+  searchQuery: string;
+  sortOrder: CarSortOrder;
+  showPrimaryOnly: boolean;
+
+  selectCar: (id: string | null) => void;
+  clearSelectedCar: () => void;
+  setSearchQuery: (query: string) => void;
+  setSortOrder: (order: CarSortOrder) => void;
+  setShowPrimaryOnly: (value: boolean) => void;
+  resetFilters: () => void;
 }
 
 export const useCarStore = create<CarStore>()(
   persist(
     (set) => ({
-      cars: [
-        {
-          id: 'car-1',
-          make: 'Volkswagen',
-          model: 'Tiguan',
-          year: 2017,
-          engine: '2.0 TSI',
-          mileage: 128450,
-          isPrimary: true,
-        },
-      ],
-      selectedCarId: 'car-1',
+      selectedCarId: null,
 
-      addCar: (car) =>
-        set((state) => {
-          const newCar: LocalCar = {
-            ...car,
-            id: `car-${Date.now()}`,
-          };
-
-          return {
-            cars: [...state.cars, newCar],
-            selectedCarId: newCar.id,
-          };
-        }),
-
-      updateCar: (id, updates) =>
-        set((state) => ({
-          cars: state.cars.map((car) =>
-            car.id === id ? { ...car, ...updates, id: car.id } : car,
-          ),
-        })),
+      searchQuery: '',
+      sortOrder: 'newest',
+      showPrimaryOnly: false,
 
       selectCar: (id) =>
-        set((state) => ({
-          selectedCarId: state.cars.some((car) => car.id === id)
-            ? id
-            : state.selectedCarId,
-        })),
+        set({
+          selectedCarId: id?.trim() || null,
+        }),
 
-      removeCar: (id) =>
-        set((state) => {
-          const cars = state.cars.filter((car) => car.id !== id);
+      clearSelectedCar: () =>
+        set({
+          selectedCarId: null,
+        }),
 
-          return {
-            cars,
-            selectedCarId:
-              state.selectedCarId === id
-                ? cars[0]?.id ?? null
-                : state.selectedCarId,
-          };
+      setSearchQuery: (query) =>
+        set({
+          searchQuery: query,
+        }),
+
+      setSortOrder: (order) =>
+        set({
+          sortOrder: order,
+        }),
+
+      setShowPrimaryOnly: (value) =>
+        set({
+          showPrimaryOnly: value,
+        }),
+
+      resetFilters: () =>
+        set({
+          searchQuery: '',
+          sortOrder: 'newest',
+          showPrimaryOnly: false,
         }),
     }),
     {
-      name: 'lovablecar-cars-v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      /**
+       * New storage key:
+       * Do not hydrate obsolete local car records
+       * or the old "car-1" selection.
+       */
+      name: 'lovablecar-car-preferences-v1',
+
+      storage: createJSONStorage(
+        () => AsyncStorage,
+      ),
+
+      /**
+       * Persist preferences only.
+       * Never persist car or service records here.
+       */
       partialize: (state) => ({
-        cars: state.cars,
         selectedCarId: state.selectedCarId,
+        sortOrder: state.sortOrder,
+        showPrimaryOnly: state.showPrimaryOnly,
       }),
     },
   ),

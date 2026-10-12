@@ -1,91 +1,107 @@
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import {
+    createJSONStorage,
+    persist,
+} from 'zustand/middleware';
 
-export interface LocalServiceRecord {
-  id: string;
-  vehicleId: string;
-  date: string;
-  mileage: number;
-  serviceName: string;
-  totalCost: number;
-  currency: string;
-  workshop?: string;
-  documentUri?: string;
-  createdAt: string;
-}
+/**
+ * Service records belong to PostgreSQL.
+ *
+ * This store contains UI preferences only.
+ * Do not add service records or API response
+ * objects to this Zustand store.
+ */
 
-export type NewServiceRecord = Omit<
-  LocalServiceRecord,
-  'id' | 'createdAt'
->;
+export type ServiceSortOrder =
+  | 'newest'
+  | 'oldest'
+  | 'mileage-high'
+  | 'mileage-low';
 
-export type ServiceUpdates = Partial<
-  Omit<LocalServiceRecord, 'id' | 'createdAt'>
->;
+export type ServiceViewMode =
+  | 'list'
+  | 'compact';
 
 interface ServiceStore {
-  services: LocalServiceRecord[];
+  searchQuery: string;
+  sortOrder: ServiceSortOrder;
+  viewMode: ServiceViewMode;
+  showCosts: boolean;
 
-  addService: (service: NewServiceRecord) => void;
-  updateService: (id: string, updates: ServiceUpdates) => void;
-  removeService: (id: string) => void;
-  removeServicesForVehicle: (vehicleId: string) => void;
+  setSearchQuery: (query: string) => void;
+
+  setSortOrder: (
+    order: ServiceSortOrder,
+  ) => void;
+
+  setViewMode: (
+    mode: ServiceViewMode,
+  ) => void;
+
+  setShowCosts: (
+    show: boolean,
+  ) => void;
+
+  resetFilters: () => void;
 }
 
-export const useServiceStore = create<ServiceStore>()(
-  persist(
-    (set) => ({
-      services: [],
+const initialPreferences = {
+  searchQuery: '',
+  sortOrder: 'newest' as ServiceSortOrder,
+  viewMode: 'list' as ServiceViewMode,
+  showCosts: true,
+};
 
-      addService: (service) =>
-        set((state) => ({
-          services: [
-            {
-              ...service,
-              id: `service-${Date.now()}-${Math.random()
-                .toString(36)
-                .slice(2, 8)}`,
-              createdAt: new Date().toISOString(),
-            },
-            ...state.services,
-          ],
-        })),
+export const useServiceStore =
+  create<ServiceStore>()(
+    persist(
+      (set) => ({
+        ...initialPreferences,
 
-      updateService: (id, updates) =>
-        set((state) => ({
-          services: state.services.map((service) =>
-            service.id === id
-              ? {
-                  ...service,
-                  ...updates,
-                  id: service.id,
-                  createdAt: service.createdAt,
-                }
-              : service,
-          ),
-        })),
+        setSearchQuery: (searchQuery) =>
+          set({ searchQuery }),
 
-      removeService: (id) =>
-        set((state) => ({
-          services: state.services.filter(
-            (service) => service.id !== id,
-          ),
-        })),
+        setSortOrder: (sortOrder) =>
+          set({ sortOrder }),
 
-      removeServicesForVehicle: (vehicleId) =>
-        set((state) => ({
-          services: state.services.filter(
-            (service) => service.vehicleId !== vehicleId,
-          ),
-        })),
-    }),
-    {
-      name: 'lovablecar-services-v1',
-      storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({
-        services: state.services,
+        setViewMode: (viewMode) =>
+          set({ viewMode }),
+
+        setShowCosts: (showCosts) =>
+          set({ showCosts }),
+
+        resetFilters: () =>
+          set({
+            searchQuery:
+              initialPreferences.searchQuery,
+
+            sortOrder:
+              initialPreferences.sortOrder,
+
+            viewMode:
+              initialPreferences.viewMode,
+
+            showCosts:
+              initialPreferences.showCosts,
+          }),
       }),
-    },
-  ),
-);
+      {
+        // New key: never hydrate legacy
+        // AsyncStorage service records.
+        name: 'lovablecar-service-preferences-v1',
+
+        storage: createJSONStorage(
+          () => AsyncStorage,
+        ),
+
+        partialize: (state) => ({
+          searchQuery: state.searchQuery,
+          sortOrder: state.sortOrder,
+          viewMode: state.viewMode,
+          showCosts: state.showCosts,
+        }),
+      },
+    ),
+  );
