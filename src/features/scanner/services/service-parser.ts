@@ -1,3 +1,4 @@
+
 export interface ParsedServiceData {
   date: string;
   mileage: string;
@@ -8,19 +9,36 @@ export interface ParsedServiceData {
   rawText: string;
 }
 
-const CURRENCIES = ['BYN', 'USD', 'EUR', 'PLN', 'GBP', 'RUB'] as const;
+const CURRENCIES = [
+  'BYN',
+  'USD',
+  'EUR',
+  'PLN',
+  'GBP',
+  'RUB',
+] as const;
 
 type SupportedCurrency = (typeof CURRENCIES)[number];
 
+function getLines(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 function parseDate(text: string): string {
-  const lines = text.split(/\r?\n/).map((line) => line.trim());
+  const lines = getLines(text);
 
   const orderLine = lines.find((line) =>
-    /заказ-наряд|заказ наряд|service order/i.test(line),
+    /заказ[-\s]?наряд|service order/i.test(line),
   );
 
+  const datePattern =
+    /(\d{1,2})[./-](\d{1,2})[./-](\d{4})/;
+
   const match =
-    orderLine?.match(/\b(\d{1,2})[./-](\d{1,2})[./-](\d{4})\b/) ??
+    orderLine?.match(datePattern) ??
     text.match(
       /(?:дата|date)\s*[:\-]?\s*(\d{1,2})[./-](\d{1,2})[./-](\d{4})/i,
     );
@@ -33,7 +51,9 @@ function parseDate(text: string): string {
   const month = Number(match[2]);
   const year = Number(match[3]);
 
-  const date = new Date(Date.UTC(year, month - 1, day));
+  const date = new Date(
+    Date.UTC(year, month - 1, day),
+  );
 
   if (
     date.getUTCFullYear() !== year ||
@@ -43,60 +63,106 @@ function parseDate(text: string): string {
     return '';
   }
 
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  return [
+    year,
+    String(month).padStart(2, '0'),
+    String(day).padStart(2, '0'),
+  ].join('-');
 }
 
 function parseMileage(text: string): string {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const lines = getLines(text);
 
-  const isValidMileage = (value: string): boolean => {
-    const digits = value.replace(/\D/g, '');
+  const normalizeMileage = (
+    value: string,
+  ): string => {
+    const cleaned = value
+      .replace(/[\s\u00A0\u202F]/g, '')
+      .replace(/(?:км|km)$/i, '');
 
-    if (!/^\d{4,7}$/.test(digits)) return false;
+    if (!/^\d{1,8}$/.test(cleaned)) {
+      return '';
+    }
 
-    const mileage = Number(digits);
-    return mileage >= 1_000 && mileage <= 1_000_000;
+    const mileage = Number(cleaned);
+
+    if (
+      !Number.isSafeInteger(mileage) ||
+      mileage < 0 ||
+      mileage > 10_000_000
+    ) {
+      return '';
+    }
+
+    return String(mileage);
   };
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
 
+    // Do not use \b after Cyrillic words.
     const labelMatch = line.match(
-      /(?:пробег|mileage|odometer)\b/i,
+      /пробег|mileage|odometer/i,
     );
 
-    if (!labelMatch) continue;
+    if (!labelMatch) {
+      continue;
+    }
 
     const afterLabel = line
-      .slice(labelMatch.index! + labelMatch[0].length)
-      .replace(/^[\s:№#-]+/, '');
+      .slice(
+        (labelMatch.index ?? 0) +
+          labelMatch[0].length,
+      )
+      .replace(/^[\s:№#–—-]+/, '');
 
-    const sameLineMatch = afterLabel.match(/^\d[\d\s]*/);
+    // Example: Пробег: 126665 км
+    const sameLineMatch = afterLabel.match(
+      /^(\d[\d\s\u00A0\u202F]*)(?:\s*(?:км|km))?$/i,
+    );
 
     if (sameLineMatch) {
-      const candidate = sameLineMatch[0].trim();
+      const mileage = normalizeMileage(
+        sameLineMatch[1],
+      );
 
-      if (isValidMileage(candidate)) {
-        return candidate.replace(/\D/g, '');
+      if (mileage) {
+        return mileage;
       }
     }
 
-    for (const nextLine of lines.slice(i + 1, i + 4)) {
+    // Example:
+    // Пробег
+    // 126665
+    for (
+      let j = i + 1;
+      j < Math.min(i + 4, lines.length);
+      j += 1
+    ) {
+      const nextLine = lines[j];
+
       if (
-        /^(?:выполненные работы|наименование работ|автомобиль|марка|модель|дата)\b/i.test(
+        /^(?:выполненные работы|наименование работ|автомобиль|марка|модель|дата)/i.test(
           nextLine,
         )
       ) {
         break;
       }
 
-      const numberMatch = nextLine.match(/^\s*(\d[\d\s]*)\s*$/);
+      const numberMatch = nextLine.match(
+        /^(\d[\d\s\u00A0\u202F]*)(?:\s*(?:км|km))?$/i,
+      );
 
-      if (numberMatch && isValidMileage(numberMatch[1])) {
-        return numberMatch[1].replace(/\D/g, '');
+      if (!numberMatch) {
+        continue;
+      }
+
+      const mileage = normalizeMileage(
+        numberMatch[1],
+      );
+
+      if (mileage) {
+        return mileage;
       }
     }
   }
@@ -104,15 +170,22 @@ function parseMileage(text: string): string {
   return '';
 }
 
-
-function parseCurrency(text: string): SupportedCurrency {
+function parseCurrency(
+  text: string,
+): SupportedCurrency {
   if (
-    /\b(BYN|BYR)\b|белорусск\w*\s+рубл|бел\.\s*руб/i.test(text)
+    /\b(BYN|BYR)\b|белорусск\w*\s+рубл|бел\.\s*руб/i.test(
+      text,
+    )
   ) {
     return 'BYN';
   }
 
-  if (/\bUSD\b|US\s*\$|доллар(?:а|ов)?/i.test(text)) {
+  if (
+    /\bUSD\b|US\s*\$|доллар(?:а|ов)?/i.test(
+      text,
+    )
+  ) {
     return 'USD';
   }
 
@@ -129,7 +202,9 @@ function parseCurrency(text: string): SupportedCurrency {
   }
 
   if (
-    /\bRUB\b|₽|российск\w*\s+рубл/i.test(text)
+    /\bRUB\b|₽|российск\w*\s+рубл/i.test(
+      text,
+    )
   ) {
     return 'RUB';
   }
@@ -137,56 +212,98 @@ function parseCurrency(text: string): SupportedCurrency {
   return 'BYN';
 }
 
+function normalizeAmount(
+  value: string,
+): string {
+  return value
+    .replace(/[\s\u00A0\u202F]/g, '')
+    .replace(',', '.');
+}
+
 function parseTotalCost(text: string): string {
-  const lines = text.split(/\r?\n/).map((line) => line.trim());
+  const lines = getLines(text);
 
-  const finalTotalIndex = lines.findIndex((line) =>
-    /всего с ндс/i.test(line),
-  );
+  // Prefer the final numeric summary.
+  // Example:
+  // Всего с НДС, руб.коп.
+  // 45,00
 
-  if (finalTotalIndex !== -1) {
-    const sameLine = lines[finalTotalIndex].match(
-      /всего с ндс.*?(\d[\d\s]*[.,]\d{2})/i,
-    );
+  const finalTotalIndices = lines
+    .map((line, index) =>
+      /^всего с ндс\s*,?\s*руб\.?\s*коп\.?$/i.test(
+        line,
+      )
+        ? index
+        : -1,
+    )
+    .filter((index) => index !== -1);
 
-    if (sameLine) {
-      return sameLine[1].replace(/\s/g, '').replace(',', '.');
-    }
+  for (const index of finalTotalIndices.reverse()) {
+    for (
+      const line of lines.slice(index + 1, index + 6)
+    ) {
+      const match = line.match(
+        /^(\d[\d\s]*[.,]\d{2})$/,
+      );
 
-    for (const line of lines.slice(finalTotalIndex + 1, finalTotalIndex + 3)) {
-      const amount = line.match(/^\s*(\d[\d\s]*[.,]\d{2})\s*$/);
-
-      if (amount) {
-        return amount[1].replace(/\s/g, '').replace(',', '.');
+      if (match) {
+        return normalizeAmount(match[1]);
       }
     }
   }
 
-  const netTotalIndex = lines.findIndex((line) =>
-    /стоимость без ндс/i.test(line),
+  // Example: Всего с НДС: 45,00
+  for (const line of lines) {
+    const match = line.match(
+      /всего с ндс\s*[:\-]?\s*(\d[\d\s]*[.,]\d{2})/i,
+    );
+
+    if (match) {
+      return normalizeAmount(match[1]);
+    }
+  }
+
+  // Fallback: Стоимость без НДС
+  const netTotalIndex = lines.findIndex(
+    (line) =>
+      /стоимость без ндс/i.test(line),
   );
 
   if (netTotalIndex !== -1) {
-    for (const line of lines.slice(netTotalIndex + 1, netTotalIndex + 3)) {
-      const amount = line.match(/^\s*(\d[\d\s]*[.,]\d{2})\s*$/);
+    for (
+      const line of lines.slice(
+        netTotalIndex + 1,
+        netTotalIndex + 4,
+      )
+    ) {
+      const match = line.match(
+        /^(\d[\d\s]*[.,]\d{2})$/,
+      );
 
-      if (amount) {
-        return amount[1].replace(/\s/g, '').replace(',', '.');
+      if (match) {
+        return normalizeAmount(match[1]);
       }
     }
   }
 
+  // Generic total fallback.
   for (const line of lines) {
-    if (!/^(?:итого|всего)\s*[:\-]/i.test(line)) {
+    if (
+      !/^(?:итого|всего)\s*[:\-]/i.test(
+        line,
+      )
+    ) {
       continue;
     }
 
-    const amounts = line.match(/\d[\d\s]*(?:[.,]\d{1,2})?/g);
+    const amounts = line.match(
+      /\d[\d\s]*(?:[.,]\d{1,2})?/g,
+    );
 
     if (amounts?.length) {
-      const amount = amounts[amounts.length - 1]
-        .replace(/\s/g, '')
-        .replace(',', '.');
+      const amount = normalizeAmount(
+        amounts[amounts.length - 1],
+      );
 
       if (Number(amount) > 0) {
         return amount;
@@ -198,39 +315,50 @@ function parseTotalCost(text: string): string {
 }
 
 function parseServiceName(text: string): string {
-  const lines = text.split(/\r?\n/).map((line) => line.trim());
+  const lines = getLines(text);
 
-  const headingIndex = lines.findIndex((line) =>
-    /^(?:наименование работ|выполненные работы|описание работ)\s*:?\s*$/i.test(
-      line,
-    ),
+  const headingIndex = lines.findIndex(
+    (line) =>
+      /^(?:выполненные работы|описание работ)\s*:?\s*$/i.test(
+        line,
+      ),
   );
 
-  if (headingIndex !== -1) {
-    for (const line of lines.slice(headingIndex + 1, headingIndex + 8)) {
-      if (
-        /^(?:№|кол-?|количество|норма|цена|надбавка|скидка|итого)\b/i.test(
-          line,
-        )
-      ) {
-        continue;
-      }
+  const servicePattern =
+    /замена|ремонт|диагностик|обслуживан|масло|тормоз|фильтр|свеч|replacement|repair|maintenance|oil change/i;
 
-      if (
-        /^(?:компоненты и технические жидкости|стоимость без ндс)\b/i.test(
-          line,
-        )
-      ) {
+  const stopPattern =
+    /^(?:компоненты и технические жидкости|итоговая стоимость заказа|стоимость без ндс|всего с ндс|гарантийные обязательства)/i;
+
+  if (headingIndex !== -1) {
+    const services: string[] = [];
+
+    for (
+      const line of lines.slice(
+        headingIndex + 1,
+        headingIndex + 35,
+      )
+    ) {
+      if (stopPattern.test(line)) {
         break;
       }
 
       if (
-        /замена|ремонт|диагностик|обслуживан|масло|тормоз|фильтр|replacement|repair|maintenance|oil change/i.test(
+        servicePattern.test(line) &&
+        !/^(?:цена|надбавка|скидка|итого)/i.test(
           line,
         )
       ) {
-        return line.slice(0, 250);
+        if (!services.includes(line)) {
+          services.push(line);
+        }
       }
+    }
+
+    if (services.length > 0) {
+      // Your Zod schema limits serviceName
+      // to 150 characters.
+      return services.join('\n').slice(0, 150);
     }
   }
 
@@ -240,52 +368,78 @@ function parseServiceName(text: string): string {
 
   if (joinedLine) {
     const description = joinedLine
-      .replace(/^.*?наименование работ\s*/i, '')
+      .replace(
+        /^.*?наименование работ\s*/i,
+        '',
+      )
       .trim();
 
     if (description) {
-      return description.slice(0, 250);
+      return description.slice(0, 150);
     }
   }
 
   const candidate = lines.find(
     (line) =>
-      /замена|ремонт|диагностик|обслуживан|масло|тормоз|фильтр|replacement|repair|maintenance|oil change/i.test(
-        line,
-      ) &&
+      servicePattern.test(line) &&
       line.length <= 180 &&
       !/итого|к оплате|всего/i.test(line),
   );
 
-  return candidate ?? '';
+  return candidate?.slice(0, 150) ?? '';
 }
 
 function parseWorkshop(text: string): string {
-  const lines = text.split(/\r?\n/).map((line) => line.trim());
+  const lines = getLines(text);
 
-  // Examples: ООО "СТО Тандем", СТО «ТАНДЕМ».
-  const line = lines.find((item) =>
-    /(?:ООО\s*["«].*СТО|СТО\s*[«"“].+[»"”])/i.test(item),
+  // Example: СТО «ТАНДЕМ»
+  const quotedStoLine = lines.find(
+    (line) =>
+      /СТО\s*[«"“][^»"”]+[»"”]/i.test(
+        line,
+      ),
   );
 
-  if (line) {
-    const stoMatch = line.match(/СТО\s*[«"“]?([^»"”]+)[»"”]?/i);
+  if (quotedStoLine) {
+    const match = quotedStoLine.match(
+      /СТО\s*[«"“]([^»"”]+)[»"”]/i,
+    );
 
-    if (stoMatch) {
-      return `СТО «${stoMatch[1].trim()}»`;
+    if (match) {
+      return `СТО «${match[1].trim()}»`;
     }
-
-    return line.slice(0, 120);
   }
 
-  const namedService = lines.find((item) =>
-    /автосервис|service center|auto service|garage/i.test(item),
+  // Example: ООО "СТО Тандем"
+  const companyLine = lines.find((line) =>
+    /ООО\s*["«].*СТО/i.test(line),
+  );
+
+  if (companyLine) {
+    const match = companyLine.match(
+      /СТО\s+([^»"”]+)/i,
+    );
+
+    if (match) {
+      return `СТО «${match[1].trim()}»`;
+    }
+
+    return companyLine.slice(0, 120);
+  }
+
+  const namedService = lines.find(
+    (line) =>
+      /автосервис|service center|auto service|garage/i.test(
+        line,
+      ),
   );
 
   return namedService?.slice(0, 120) ?? '';
 }
 
-export function parseServiceText(text: string): ParsedServiceData {
+export function parseServiceText(
+  text: string,
+): ParsedServiceData {
   return {
     date: parseDate(text),
     mileage: parseMileage(text),

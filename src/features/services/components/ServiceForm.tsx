@@ -45,6 +45,8 @@ export default function ServiceForm({
     reValidateMode: 'onChange',
   });
 
+  console.log('test control', control);
+
   const submit = handleSubmit(async (values) => {
     await onSubmit(values);
   });
@@ -79,12 +81,42 @@ export default function ServiceForm({
           keyboardType="number-pad"
         />
 
-        <FormField
-          control={control}
-          name="serviceName"
-          label="Service"
-          placeholder="Engine oil change"
-        />
+        {/* Multiline Service field */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Service</Text>
+
+          <Controller
+            control={control}
+            name="serviceName"
+            render={({ field, fieldState }) => (
+              <>
+                <TextInput
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  onBlur={field.onBlur}
+                  placeholder={
+                    'Engine oil change\nOil filter replacement\nAir filter replacement'
+                  }
+                  placeholderTextColor="#A3A3A3"
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  autoCapitalize="sentences"
+                  accessibilityLabel="Service"
+                  style={[
+                    styles.input,
+                    styles.textArea,
+                    fieldState.error && styles.inputError,
+                  ]}
+                />
+
+                <FormError
+                  message={fieldState.error?.message}
+                />
+              </>
+            )}
+          />
+        </View>
 
         <View style={styles.field}>
           <Text style={styles.label}>Cost</Text>
@@ -107,7 +139,10 @@ export default function ServiceForm({
                     fieldState.error && styles.inputError,
                   ]}
                 />
-                <FormError message={fieldState.error?.message} />
+
+                <FormError
+                  message={fieldState.error?.message}
+                />
               </>
             )}
           />
@@ -123,23 +158,28 @@ export default function ServiceForm({
               <>
                 <View style={styles.currencyRow}>
                   {supportedCurrencyOptions.map((option) => {
-                    const selected = field.value === option.value;
+                    const selected =
+                      field.value === option.value;
 
                     return (
                       <Pressable
                         key={option.value}
                         accessibilityRole="radio"
                         accessibilityState={{ selected }}
-                        onPress={() => field.onChange(option.value)}
+                        onPress={() =>
+                          field.onChange(option.value)
+                        }
                         style={[
                           styles.currencyOption,
-                          selected && styles.currencyOptionSelected,
+                          selected &&
+                            styles.currencyOptionSelected,
                         ]}
                       >
                         <Text
                           style={[
                             styles.currencyText,
-                            selected && styles.currencyTextSelected,
+                            selected &&
+                              styles.currencyTextSelected,
                           ]}
                         >
                           {option.label}
@@ -148,7 +188,10 @@ export default function ServiceForm({
                     );
                   })}
                 </View>
-                <FormError message={fieldState.error?.message} />
+
+                <FormError
+                  message={fieldState.error?.message}
+                />
               </>
             )}
           />
@@ -173,7 +216,9 @@ export default function ServiceForm({
         {isSubmitting ? (
           <ActivityIndicator color="#171717" />
         ) : (
-          <Text style={styles.submitText}>{submitLabel}</Text>
+          <Text style={styles.submitText}>
+            {submitLabel}
+          </Text>
         )}
       </Pressable>
 
@@ -240,6 +285,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     fontSize: 16,
     color: '#171717',
+  },
+  textArea: {
+    minHeight: 130,
+    paddingTop: 14,
+    paddingBottom: 14,
+    textAlignVertical: 'top',
   },
   inputError: {
     borderColor: '#EF4444',

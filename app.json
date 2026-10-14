@@ -1,14 +1,15 @@
 {
   "expo": {
-    "name": "lovable-car-mobile",
+    "name": "LovableCar",
     "slug": "lovable-car-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/lovablecarlogo.png",
+    "icon": "./assets/images/splash-icon.png",
     "scheme": "lovablecarmobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/lovablecarlogo.png"
+      "icon": "./assets/lovablecarlogo.png",
+      "bundleIdentifier": "com.alextukaylo.lovable-car-mobile"
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +18,11 @@
         "backgroundImage": "./assets/images/splash-icon.png",
         "monochromeImage": "./assets/images/splash-icon.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -30,12 +35,13 @@
         {
           "backgroundColor": "#F7F7F5",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "imageWidth": 350,
           "resizeMode": "contain"
         }
       ],
       "expo-secure-store",
-     [
+      "expo-web-browser",
+      [
         "expo-camera",
         {
           "cameraPermission": "LovableCar needs access to your camera to scan service documents."

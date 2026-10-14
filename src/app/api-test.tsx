@@ -1,4 +1,5 @@
 
+import axios from 'axios';
 import { useState } from 'react';
 import {
     ActivityIndicator,
@@ -13,6 +14,39 @@ import {
     fetchCars,
     type ApiCar,
 } from '../../lib/cars.api';
+
+function getApiErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    if (error.response?.status === 401) {
+      return (
+        'Sign in required. The backend is working, ' +
+        'but you need to log in with Telegram before ' +
+        'you can access your cars.'
+      );
+    }
+
+    if (error.response?.status === 403) {
+      return 'You do not have permission to access these cars.';
+    }
+
+    if (error.response?.status === 404) {
+      return 'The requested API endpoint was not found.';
+    }
+
+    if (!error.response) {
+      return (
+        'Could not reach the backend. Check your ' +
+        'internet connection and API URL.'
+      );
+    }
+
+    return `Backend returned HTTP ${error.response.status}.`;
+  }
+
+  return error instanceof Error
+    ? error.message
+    : 'An unexpected error occurred.';
+}
 
 export default function ApiTestScreen() {
   const [cars, setCars] = useState<ApiCar[]>([]);
@@ -32,11 +66,7 @@ export default function ApiTestScreen() {
       setTested(true);
     } catch (err) {
       setCars([]);
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unknown API error',
-      );
+      setError(getApiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -57,7 +87,10 @@ export default function ApiTestScreen() {
       </Text>
 
       <Pressable
-        style={styles.button}
+        style={[
+          styles.button,
+          loading && styles.buttonDisabled,
+        ]}
         onPress={() => void handleTestConnection()}
         disabled={loading}
       >
@@ -73,9 +106,14 @@ export default function ApiTestScreen() {
       )}
 
       {error && (
-        <Text style={styles.error}>
-          Connection failed: {error}
-        </Text>
+        <View style={styles.errorCard}>
+          <Text style={styles.errorTitle}>
+            API request unsuccessful
+          </Text>
+          <Text style={styles.error}>
+            {error}
+          </Text>
+        </View>
       )}
 
       {tested && (
@@ -143,6 +181,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   buttonText: {
     color: '#FFFFFF',
     fontWeight: '700',
@@ -170,8 +211,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
+  errorCard: {
+    backgroundColor: '#FFF1F0',
+    borderRadius: 14,
+    padding: 16,
+    gap: 8,
+  },
+  errorTitle: {
+    color: '#9B2C2C',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   error: {
     color: '#C53030',
     fontSize: 14,
+    lineHeight: 21,
   },
 });
