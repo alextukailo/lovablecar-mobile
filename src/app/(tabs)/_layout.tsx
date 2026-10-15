@@ -1,6 +1,22 @@
 
 import { useAuth } from '@/auth/AuthContext';
-import { Redirect, Tabs, useRouter } from 'expo-router';
+
+import {
+    Redirect,
+    Tabs,
+    useRouter,
+} from 'expo-router';
+
+import {
+    Bell,
+    CarFront,
+    House,
+    LogOut,
+    Settings2,
+    Wrench,
+} from 'lucide-react-native';
+
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import {
@@ -14,6 +30,24 @@ import {
     View,
 } from 'react-native';
 
+// =====================================
+// COLORS
+// =====================================
+
+const COLORS = {
+  navy: '#092747',
+  blue: '#1476C8',
+  muted: '#7893AA',
+  yellow: '#FFCC32',
+  white: '#FFFFFF',
+  border: '#E0EDF6',
+  red: '#C62828',
+};
+
+// =====================================
+// PROFILE AVATAR
+// =====================================
+
 function ProfileAvatar({
   photoUrl,
   initials,
@@ -23,7 +57,8 @@ function ProfileAvatar({
   initials: string;
   size?: number;
 }) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const [imageFailed, setImageFailed] =
+    useState(false);
 
   return (
     <View
@@ -50,7 +85,9 @@ function ProfileAvatar({
         <Text
           style={[
             styles.avatarInitials,
-            { fontSize: size * 0.38 },
+            {
+              fontSize: size * 0.38,
+            },
           ]}
         >
           {initials}
@@ -59,6 +96,33 @@ function ProfileAvatar({
     </View>
   );
 }
+
+// =====================================
+// ORIGINAL TAB ICON COMPONENT
+// =====================================
+
+function TabIcon({
+  focused,
+  children,
+}: {
+  focused: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <View
+      style={[
+        styles.tabIconContainer,
+        focused && styles.tabIconActive,
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
+// =====================================
+// MAIN TABS LAYOUT
+// =====================================
 
 export default function TabsLayout() {
   const router = useRouter();
@@ -71,10 +135,17 @@ export default function TabsLayout() {
   const [loggingOut, setLoggingOut] =
     useState(false);
 
+  // =====================================
+  // AUTHENTICATION LOADING
+  // =====================================
+
   if (loading) {
     return (
       <View style={styles.loadingScreen}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator
+          size="large"
+          color={COLORS.blue}
+        />
       </View>
     );
   }
@@ -82,6 +153,10 @@ export default function TabsLayout() {
   if (!user) {
     return <Redirect href="/login" />;
   }
+
+  // =====================================
+  // USER INFORMATION
+  // =====================================
 
   const fullName = [
     user.firstName,
@@ -91,7 +166,9 @@ export default function TabsLayout() {
     .join(' ');
 
   const displayName =
-    fullName || user.username || 'Telegram user';
+    fullName ||
+    user.username ||
+    'Telegram user';
 
   const initials = (
     [
@@ -103,6 +180,10 @@ export default function TabsLayout() {
     user.username?.[0] ||
     'U'
   ).toUpperCase();
+
+  // =====================================
+  // LOGOUT
+  // =====================================
 
   async function handleLogout() {
     if (loggingOut) {
@@ -118,11 +199,18 @@ export default function TabsLayout() {
 
       router.replace('/login');
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error(
+        'Logout failed:',
+        error
+      );
     } finally {
       setLoggingOut(false);
     }
   }
+
+  // =====================================
+  // HEADER PROFILE BUTTON
+  // =====================================
 
   const profileButton = () => (
     <Pressable
@@ -138,60 +226,187 @@ export default function TabsLayout() {
     </Pressable>
   );
 
+  // =====================================
+  // RENDER
+  // =====================================
+
   return (
     <>
       <Tabs
         screenOptions={{
           headerRight: profileButton,
+
           headerStyle: {
-            backgroundColor: '#FFFFFF',
+            backgroundColor: COLORS.white,
           },
+
           headerTitleStyle: {
-            color: '#172033',
-            fontWeight: '700',
+            color: COLORS.navy,
+            fontWeight: '800',
           },
-          tabBarActiveTintColor: '#0088CC',
-          tabBarInactiveTintColor: '#64748B',
-          tabBarStyle: {
-            backgroundColor: '#FFFFFF',
-          },
+
+          headerShadowVisible: false,
+
+          tabBarActiveTintColor:
+            COLORS.navy,
+
+          tabBarInactiveTintColor:
+            COLORS.muted,
+
+          tabBarStyle: styles.tabBar,
+
+          tabBarItemStyle:
+            styles.tabBarItem,
+
+          tabBarLabelStyle:
+            styles.tabBarLabel,
+
+          tabBarIconStyle:
+            styles.tabBarIconStyle,
+
+          tabBarHideOnKeyboard: true,
         }}
       >
+        {/* ===========================
+            HOME
+        =========================== */}
+
         <Tabs.Screen
           name="index"
           options={{
             title: 'Home',
+            headerShown: false,
+
+            tabBarIcon: ({ focused }) => (
+              <TabIcon focused={focused}>
+                <House
+                  size={22}
+                  color={
+                    focused
+                      ? COLORS.navy
+                      : COLORS.muted
+                  }
+                  strokeWidth={
+                    focused ? 2.6 : 2
+                  }
+                />
+              </TabIcon>
+            ),
           }}
         />
+
+        {/* ===========================
+            CARS
+        =========================== */}
 
         <Tabs.Screen
           name="cars"
           options={{
             title: 'Cars',
+
+            tabBarIcon: ({ focused }) => (
+              <TabIcon focused={focused}>
+                <CarFront
+                  size={23}
+                  color={
+                    focused
+                      ? COLORS.navy
+                      : COLORS.muted
+                  }
+                  strokeWidth={
+                    focused ? 2.6 : 2
+                  }
+                />
+              </TabIcon>
+            ),
           }}
         />
+
+        {/* ===========================
+            SERVICE
+        =========================== */}
 
         <Tabs.Screen
           name="services"
           options={{
             title: 'Service',
+
+            tabBarIcon: ({ focused }) => (
+              <TabIcon focused={focused}>
+                <Wrench
+                  size={22}
+                  color={
+                    focused
+                      ? COLORS.navy
+                      : COLORS.muted
+                  }
+                  strokeWidth={
+                    focused ? 2.6 : 2
+                  }
+                />
+              </TabIcon>
+            ),
           }}
         />
+
+        {/* ===========================
+            REMINDERS
+        =========================== */}
 
         <Tabs.Screen
           name="reminders"
           options={{
             title: 'Reminders',
+
+            tabBarIcon: ({ focused }) => (
+              <TabIcon focused={focused}>
+                <Bell
+                  size={22}
+                  color={
+                    focused
+                      ? COLORS.navy
+                      : COLORS.muted
+                  }
+                  strokeWidth={
+                    focused ? 2.6 : 2
+                  }
+                />
+              </TabIcon>
+            ),
           }}
         />
+
+        {/* ===========================
+            SETTINGS
+        =========================== */}
 
         <Tabs.Screen
           name="settings"
           options={{
             title: 'Settings',
+
+            tabBarIcon: ({ focused }) => (
+              <TabIcon focused={focused}>
+                <Settings2
+                  size={22}
+                  color={
+                    focused
+                      ? COLORS.navy
+                      : COLORS.muted
+                  }
+                  strokeWidth={
+                    focused ? 2.6 : 2
+                  }
+                />
+              </TabIcon>
+            ),
           }}
         />
       </Tabs>
+
+      {/* =====================================
+          TELEGRAM PROFILE MODAL
+      ===================================== */}
 
       <Modal
         visible={profileOpen}
@@ -201,7 +416,11 @@ export default function TabsLayout() {
           setProfileOpen(false)
         }
       >
-        <SafeAreaView style={styles.modalRoot}>
+        <SafeAreaView
+          style={styles.modalRoot}
+        >
+          {/* Backdrop */}
+
           <Pressable
             style={styles.backdrop}
             onPress={() =>
@@ -210,15 +429,21 @@ export default function TabsLayout() {
             accessibilityLabel="Close profile"
           />
 
+          {/* Profile Popup */}
+
           <View style={styles.popup}>
-            <View style={styles.profileHeader}>
+            <View
+              style={styles.profileHeader}
+            >
               <ProfileAvatar
                 photoUrl={user.photoUrl}
                 initials={initials}
                 size={56}
               />
 
-              <View style={styles.profileInfo}>
+              <View
+                style={styles.profileInfo}
+              >
                 <Text
                   style={styles.profileName}
                   numberOfLines={1}
@@ -228,14 +453,18 @@ export default function TabsLayout() {
 
                 {user.username ? (
                   <Text
-                    style={styles.profileUsername}
+                    style={
+                      styles.profileUsername
+                    }
                     numberOfLines={1}
                   >
                     @{user.username}
                   </Text>
                 ) : (
                   <Text
-                    style={styles.profileUsername}
+                    style={
+                      styles.profileUsername
+                    }
                   >
                     Telegram account
                   </Text>
@@ -245,20 +474,37 @@ export default function TabsLayout() {
 
             <View style={styles.divider} />
 
+            {/* Logout Button */}
+
             <Pressable
-              style={styles.logoutButton}
+              style={[
+                styles.logoutButton,
+
+                loggingOut &&
+                  styles.logoutButtonDisabled,
+              ]}
               onPress={handleLogout}
               disabled={loggingOut}
               accessibilityRole="button"
             >
               {loggingOut ? (
                 <ActivityIndicator
-                  color="#C62828"
+                  color={COLORS.red}
                 />
               ) : (
-                <Text style={styles.logoutText}>
-                  Log out
-                </Text>
+                <>
+                  <LogOut
+                    size={18}
+                    color={COLORS.red}
+                    strokeWidth={2}
+                  />
+
+                  <Text
+                    style={styles.logoutText}
+                  >
+                    Log out
+                  </Text>
+                </>
               )}
             </Pressable>
           </View>
@@ -268,13 +514,85 @@ export default function TabsLayout() {
   );
 }
 
+// =====================================
+// STYLES
+// =====================================
+
 const styles = StyleSheet.create({
+  // =====================================
+  // LOADING
+  // =====================================
+
   loadingScreen: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F4F6F9',
   },
+
+  // =====================================
+  // BOTTOM NAVIGATION
+  // =====================================
+
+  tabBar: {
+    backgroundColor: COLORS.white,
+
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+
+    height: 78,
+
+    paddingTop: 6,
+    paddingBottom: 12,
+    paddingHorizontal: 8,
+
+    shadowColor: COLORS.navy,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+
+    shadowOffset: {
+      width: 0,
+      height: -3,
+    },
+
+    elevation: 6,
+  },
+
+  tabBarItem: {
+    paddingTop: 0,
+  },
+
+  tabBarIconStyle: {
+    marginBottom: 0,
+  },
+
+  tabBarLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+
+  // =====================================
+  // ACTIVE TAB DESIGN
+  // =====================================
+
+  tabIconContainer: {
+    width: 48,
+    height: 42,
+
+    borderRadius: 14,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  tabIconActive: {
+    // backgroundColor: COLORS.yellow,
+  },
+
+  // =====================================
+  // PROFILE AVATAR
+  // =====================================
 
   headerAvatarButton: {
     marginRight: 16,
@@ -283,15 +601,24 @@ const styles = StyleSheet.create({
 
   avatar: {
     backgroundColor: '#DDF1FB',
+
     alignItems: 'center',
     justifyContent: 'center',
+
     overflow: 'hidden',
+
+    borderWidth: 1,
+    borderColor: '#D2E9F7',
   },
 
   avatarInitials: {
-    color: '#0088CC',
+    color: COLORS.blue,
     fontWeight: '800',
   },
+
+  // =====================================
+  // PROFILE MODAL
+  // =====================================
 
   modalRoot: {
     flex: 1,
@@ -299,26 +626,35 @@ const styles = StyleSheet.create({
   },
 
   backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    ...StyleSheet.absoluteFillObject,
+
+    backgroundColor:
+      'rgba(9, 39, 71, 0.42)',
   },
 
   popup: {
     position: 'absolute',
+
     top: 65,
     right: 16,
+
     width: 290,
     maxWidth: '90%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+
+    backgroundColor: COLORS.white,
+
+    borderRadius: 20,
     padding: 18,
-    shadowColor: '#000000',
-    shadowOpacity: 0.14,
+
+    shadowColor: COLORS.navy,
+    shadowOpacity: 0.16,
     shadowRadius: 18,
+
     shadowOffset: {
       width: 0,
       height: 8,
     },
+
     elevation: 10,
   },
 
@@ -334,32 +670,48 @@ const styles = StyleSheet.create({
 
   profileName: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#172033',
+    fontWeight: '800',
+    color: COLORS.navy,
   },
 
   profileUsername: {
     marginTop: 4,
     fontSize: 13,
-    color: '#64748B',
+    color: COLORS.muted,
   },
 
   divider: {
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: COLORS.border,
     marginVertical: 16,
   },
 
+  // =====================================
+  // LOGOUT BUTTON
+  // =====================================
+
   logoutButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+
+    borderRadius: 12,
+
+    backgroundColor: '#FFF0F0',
+
     alignItems: 'center',
+    justifyContent: 'center',
+
+    flexDirection: 'row',
+    gap: 9,
+  },
+
+  logoutButtonDisabled: {
+    opacity: 0.6,
   },
 
   logoutText: {
-    color: '#C62828',
+    color: COLORS.red,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
   },
 });

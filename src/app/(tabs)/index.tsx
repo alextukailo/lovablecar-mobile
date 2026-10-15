@@ -1,7 +1,25 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
+
 import {
+    AlertCircle,
+    CalendarClock,
+    CarFront,
+    CheckCircle2,
+    ChevronRight,
+    ClipboardList,
+    Clock3,
+    FileText,
+    Gauge,
+    Plus,
+    Settings2,
+    Wrench,
+} from 'lucide-react-native';
+
+import {
+    Image,
+    ImageBackground,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -10,21 +28,28 @@ import {
 } from 'react-native';
 
 import { api } from '../../../lib/api';
-import {
-    useCarMaintenanceSchedules,
-} from '../../../lib/maintenance.queries';
+import { useCarMaintenanceSchedules } from '../../../lib/maintenance.queries';
 import { useCars } from '../../features/cars/hooks/useCars';
 import {
     formatMaintenanceDeadline,
     getMaintenanceName,
 } from '../../features/maintenance/utils/maintenance-display';
-import {
-    calculateMaintenanceOverview,
-} from '../../features/maintenance/utils/maintenance-overview';
-import {
-    findNextMaintenance,
-} from '../../features/maintenance/utils/next-maintenance';
+import { calculateMaintenanceOverview } from '../../features/maintenance/utils/maintenance-overview';
+import { findNextMaintenance } from '../../features/maintenance/utils/next-maintenance';
 import { useCarStore } from '../../store/car.store';
+
+const COLORS = {
+  navy: '#092747',
+  blue: '#1476C8',
+  muted: '#5E7B99',
+  sky: '#DDF2FF',
+  white: '#FFFFFF',
+  yellow: '#FFCC32',
+  border: '#E0EDF6',
+  red: '#D75A4C',
+  amber: '#D39B10',
+  green: '#218C83',
+};
 
 interface ApiService {
   id: string;
@@ -61,9 +86,7 @@ export default function HomeScreen() {
   );
 
   const selectedCar =
-    cars.find(
-      (car) => car.id === storedSelectedCarId,
-    ) ??
+    cars.find((car) => car.id === storedSelectedCarId) ??
     cars.find((car) => car.isPrimary) ??
     cars[0] ??
     null;
@@ -88,8 +111,6 @@ export default function HomeScreen() {
     refetch: refetchMaintenance,
   } = useCarMaintenanceSchedules(selectedCarId ?? '');
 
-  // Shared maintenance calculations.
-  // No database writes or modifications to schedules.
   const maintenanceOverview = calculateMaintenanceOverview(
     maintenanceSchedules,
     selectedCar?.mileage ?? 0,
@@ -173,161 +194,373 @@ export default function HomeScreen() {
   const nextServiceStatus =
     nextMaintenance?.result.label ?? null;
 
+  const maintenanceAttentionCount =
+    maintenanceCounts.dueSoon +
+    maintenanceCounts.overdue;
+
   return (
-    <View style={styles.container}>
+    <ImageBackground
+      source={require('../../../assets/images/lovablecar-main-background.png')}
+      style={styles.screen}
+      resizeMode="cover"
+    >
       <ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
       >
-        <Text style={styles.logo}>LovableCar</Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.brandRow}>
+            <View style={styles.brandIcon}>
+              <CarFront
+                size={19}
+                color={COLORS.navy}
+                strokeWidth={2.4}
+              />
+            </View>
 
-        <Text style={styles.greeting}>
-          Good morning 👋
-        </Text>
+            <Text style={styles.brandLabel}>
+              LOVABLECAR
+            </Text>
+          </View>
 
-        {/* Current car */}
+          <Text style={styles.pageTitle}>
+            My Cars
+          </Text>
+
+          <Text style={styles.headerSubtitle}>
+            Everything your car needs, in one place
+          </Text>
+        </View>
+
+        {/* Vehicle Card */}
         <Pressable
-          style={styles.carCard}
+          style={styles.vehicleCard}
           onPress={openSelectedCar}
         >
-          <View style={styles.carInfo}>
-            <Text style={styles.carTitle}>
-              🚗{' '}
-              {isLoadingCars
-                ? 'Loading car...'
-                : selectedCar
-                  ? `${selectedCar.make} ${selectedCar.model}`
-                  : 'No car selected'}
-            </Text>
+          <View style={styles.vehicleCardTop}>
+            <View style={styles.vehicleBadge}>
+              <CarFront
+                size={25}
+                color={COLORS.blue}
+                strokeWidth={2}
+              />
+            </View>
 
-            {selectedCar && (
-              <Text style={styles.carSubtitle}>
-                {selectedCar.year}
-                {selectedCar.engine
-                  ? ` · ${selectedCar.engine}`
-                  : ''}
+            <View style={styles.vehicleDetails}>
+              <Text style={styles.vehicleName}>
+                {isLoadingCars
+                  ? 'Loading car...'
+                  : selectedCar
+                    ? `${selectedCar.make} ${selectedCar.model}`
+                    : 'No car selected'}
               </Text>
-            )}
 
-            {isCarsError && (
-              <Text style={styles.errorText}>
-                Could not load cars.
+              <Text style={styles.vehicleSubtitle}>
+                {selectedCar
+                  ? `${selectedCar.year}${
+                      selectedCar.engine
+                        ? ` · ${selectedCar.engine}`
+                        : ''
+                    }`
+                  : 'Tap to manage your cars'}
               </Text>
-            )}
+            </View>
+
+            <ChevronRight
+              size={21}
+              color={COLORS.muted}
+              strokeWidth={2}
+            />
           </View>
 
           {selectedCar && (
-            <Text style={styles.mileage}>
-              {selectedCar.mileage.toLocaleString()} km
-            </Text>
+            <Image
+              source={require('../../../assets/images/lovablecar-background.png')}
+              style={styles.vehicleIllustration}
+              resizeMode="cover"
+            />
           )}
+
+          <View style={styles.vehicleCardFooter}>
+            <View style={styles.vehicleFooterLeft}>
+              <CheckCircle2
+                size={14}
+                color={COLORS.green}
+                strokeWidth={2.2}
+              />
+              <Text style={styles.vehicleFooterText}>
+                Vehicle overview
+              </Text>
+            </View>
+
+            <View style={styles.vehicleFooterRight}>
+              <Text style={styles.vehicleFooterLink}>
+                View details
+              </Text>
+              <ChevronRight
+                size={15}
+                color={COLORS.blue}
+              />
+            </View>
+          </View>
         </Pressable>
 
         {isCarsError && (
-          <Pressable onPress={() => void refetchCars()}>
-            <Text style={styles.retryText}>
-              Tap to retry loading cars
+          <Pressable
+            style={styles.errorCard}
+            onPress={() => void refetchCars()}
+          >
+            <AlertCircle
+              size={17}
+              color="#B91C1C"
+            />
+            <Text style={styles.errorText}>
+              Could not load cars. Tap to retry.
             </Text>
           </Pressable>
         )}
 
-        {/* Maintenance overview */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-            MAINTENANCE OVERVIEW
-          </Text>
+        {/* Statistics */}
+        <View style={styles.statsRow}>
+          <Pressable
+            style={styles.statCard}
+            onPress={openSelectedCar}
+          >
+            <View style={styles.statIconBlue}>
+              <Gauge
+                size={20}
+                color={COLORS.blue}
+                strokeWidth={2}
+              />
+            </View>
+
+            <Text
+              style={styles.statValue}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {selectedCar
+                ? selectedCar.mileage.toLocaleString()
+                : '—'}
+            </Text>
+
+            <Text style={styles.statLabel}>
+              Mileage
+            </Text>
+            <Text style={styles.statUnit}>
+              km
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.statCard}
+            onPress={() =>
+              router.push('/(tabs)/services')
+            }
+          >
+            <View style={styles.statIconBlue}>
+              <FileText
+                size={20}
+                color={COLORS.blue}
+                strokeWidth={2}
+              />
+            </View>
+
+            <Text style={styles.statValue}>
+              {isLoadingServices
+                ? '…'
+                : isServicesError
+                  ? '—'
+                  : services.length}
+            </Text>
+
+            <Text style={styles.statLabel}>
+              Services
+            </Text>
+            <Text style={styles.statUnit}>
+              records
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.statCard}
+            onPress={openSelectedCar}
+          >
+            <View style={styles.statIconYellow}>
+              <CalendarClock
+                size={20}
+                color="#A77900"
+                strokeWidth={2}
+              />
+            </View>
+
+            <Text style={styles.statValue}>
+              {!selectedCar ||
+              isLoadingMaintenance ||
+              isMaintenanceError
+                ? '—'
+                : maintenanceAttentionCount}
+            </Text>
+
+            <Text style={styles.statLabel}>
+              Attention
+            </Text>
+            <Text style={styles.statUnit}>
+              items
+            </Text>
+          </Pressable>
         </View>
 
-        {!selectedCar ? (
-          <View style={styles.maintenanceEmptyCard}>
-            <Text style={styles.maintenanceEmptyTitle}>
-              No car selected
+        {/* Upcoming Service */}
+        <SectionHeading
+          title="Upcoming Service"
+          icon="calendar"
+        />
+
+        <Pressable
+          style={styles.upcomingCard}
+          onPress={openNextMaintenance}
+        >
+          <View style={styles.upcomingIcon}>
+            <Wrench
+              size={23}
+              color={COLORS.navy}
+              strokeWidth={2.2}
+            />
+          </View>
+
+          <View style={styles.upcomingInfo}>
+            <Text style={styles.upcomingEyebrow}>
+              NEXT MAINTENANCE
             </Text>
 
-            <Text style={styles.maintenanceEmptyText}>
-              Add or select a car to see maintenance reminders.
+            <Text style={styles.upcomingTitle}>
+              {nextServiceTitle}
             </Text>
+
+            <Text style={styles.upcomingDescription}>
+              {nextServiceDescription}
+            </Text>
+
+            {nextServiceStatus && (
+              <View style={styles.statusRow}>
+                <Clock3
+                  size={13}
+                  color={
+                    nextMaintenance?.result.status ===
+                    'OVERDUE'
+                      ? COLORS.red
+                      : nextMaintenance?.result.status ===
+                          'DUE_SOON'
+                        ? COLORS.amber
+                        : COLORS.green
+                  }
+                />
+
+                <Text
+                  style={[
+                    styles.upcomingStatus,
+                    nextMaintenance?.result.status ===
+                    'OVERDUE'
+                      ? styles.overdueText
+                      : nextMaintenance?.result.status ===
+                          'DUE_SOON'
+                        ? styles.dueSoonText
+                        : styles.upcomingText,
+                  ]}
+                >
+                  {nextServiceStatus}
+                </Text>
+              </View>
+            )}
           </View>
+
+          <ChevronRight
+            size={20}
+            color="#9E7B24"
+          />
+        </Pressable>
+
+        {/* Maintenance Overview */}
+        <SectionHeading
+          title="Maintenance Overview"
+          icon="settings"
+        />
+
+        {!selectedCar ? (
+          <MessageCard
+            title="No car selected"
+            description="Add or select a car to see maintenance reminders."
+          />
         ) : isLoadingMaintenance ? (
-          <View style={styles.maintenanceEmptyCard}>
-            <Text style={styles.statusText}>
-              Loading maintenance schedules...
-            </Text>
-          </View>
+          <MessageCard
+            description="Loading maintenance schedules..."
+          />
         ) : isMaintenanceError ? (
           <Pressable
-            style={styles.maintenanceEmptyCard}
+            style={styles.errorCard}
             onPress={() => void refetchMaintenance()}
           >
+            <AlertCircle
+              size={17}
+              color="#B91C1C"
+            />
             <Text style={styles.errorText}>
-              Could not load maintenance schedules.
-              Tap to retry.
+              Could not load maintenance schedules. Tap to retry.
             </Text>
           </Pressable>
         ) : (
           <Pressable
-            style={styles.maintenanceOverviewCard}
+            style={styles.overviewCard}
             onPress={openSelectedCar}
           >
-            <View style={styles.maintenanceCountRow}>
-              <View style={styles.maintenanceCountItem}>
-                <Text
-                  style={[
-                    styles.maintenanceCount,
-                    styles.overdueCount,
-                  ]}
-                >
-                  {maintenanceCounts.overdue}
-                </Text>
+            <View style={styles.overviewRow}>
+              <OverviewCount
+                value={maintenanceCounts.overdue}
+                label="Overdue"
+                color={COLORS.red}
+                background="#FFF0EE"
+                kind="overdue"
+              />
 
-                <Text style={styles.maintenanceCountLabel}>
-                  Overdue
-                </Text>
-              </View>
+              <View style={styles.overviewDivider} />
 
-              <View style={styles.maintenanceCountDivider} />
+              <OverviewCount
+                value={maintenanceCounts.dueSoon}
+                label="Due soon"
+                color={COLORS.amber}
+                background="#FFF7DF"
+                kind="dueSoon"
+              />
 
-              <View style={styles.maintenanceCountItem}>
-                <Text
-                  style={[
-                    styles.maintenanceCount,
-                    styles.dueSoonCount,
-                  ]}
-                >
-                  {maintenanceCounts.dueSoon}
-                </Text>
+              <View style={styles.overviewDivider} />
 
-                <Text style={styles.maintenanceCountLabel}>
-                  Due soon
-                </Text>
-              </View>
-
-              <View style={styles.maintenanceCountDivider} />
-
-              <View style={styles.maintenanceCountItem}>
-                <Text
-                  style={[
-                    styles.maintenanceCount,
-                    styles.upcomingCount,
-                  ]}
-                >
-                  {maintenanceCounts.upcoming}
-                </Text>
-
-                <Text style={styles.maintenanceCountLabel}>
-                  Upcoming
-                </Text>
-              </View>
+              <OverviewCount
+                value={maintenanceCounts.upcoming}
+                label="Upcoming"
+                color={COLORS.green}
+                background="#E7F7F3"
+                kind="upcoming"
+              />
             </View>
 
-            <Text style={styles.maintenanceOverviewFooter}>
-              {maintenanceCounts.configured === 0
-                ? 'No maintenance due dates configured yet'
-                : 'View maintenance schedules ›'}
-            </Text>
+            <View style={styles.overviewFooter}>
+              <Text style={styles.overviewFooterText}>
+                {maintenanceCounts.configured === 0
+                  ? 'No maintenance due dates configured yet'
+                  : 'View maintenance schedules'}
+              </Text>
+
+              <ChevronRight
+                size={16}
+                color={COLORS.blue}
+              />
+            </View>
 
             {maintenanceCounts.unconfigured > 0 && (
-              <Text style={styles.maintenanceUnconfigured}>
+              <Text style={styles.unconfiguredText}>
                 {maintenanceCounts.unconfigured}{' '}
                 {maintenanceCounts.unconfigured === 1
                   ? 'enabled schedule needs configuration'
@@ -337,99 +570,82 @@ export default function HomeScreen() {
           </Pressable>
         )}
 
-        {/* Next service */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-            NEXT SERVICE
-          </Text>
-        </View>
-
+        {/* Add Service */}
         <Pressable
-          style={styles.nextServiceCard}
-          onPress={openNextMaintenance}
-        >
-          <View style={styles.serviceIcon}>
-            <View style={styles.serviceDot} />
-          </View>
-
-          <View style={styles.nextServiceContent}>
-            <Text style={styles.nextServiceTitle}>
-              {nextServiceTitle}
-            </Text>
-
-            <Text style={styles.nextServiceDistance}>
-              {nextServiceDescription}
-            </Text>
-
-            {nextServiceStatus && (
-              <Text
-                style={[
-                  styles.nextServiceStatus,
-                  nextMaintenance?.result.status === 'OVERDUE'
-                    ? styles.nextServiceOverdue
-                    : nextMaintenance?.result.status === 'DUE_SOON'
-                      ? styles.nextServiceDueSoon
-                      : styles.nextServiceUpcoming,
-                ]}
-              >
-                {nextServiceStatus}
-              </Text>
-            )}
-
-            <Text style={styles.nextServiceTime}>
-              {nextMaintenance
-                ? 'Tap to edit maintenance schedule'
-                : selectedCar
-                  ? 'Tap to view maintenance details'
-                  : 'No reminder configured'}
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* Add service */}
-        <Pressable
-          style={styles.addButton}
+          style={styles.addServiceButton}
           onPress={handleAddService}
         >
-          <Text style={styles.addButtonText}>
-            + Add service
+          <Plus
+            size={21}
+            color={COLORS.navy}
+            strokeWidth={2.8}
+          />
+          <Text style={styles.addServiceButtonText}>
+            Add Service
           </Text>
         </Pressable>
 
-        {/* Recent services */}
-        <View style={styles.recentHeader}>
-          <Text style={styles.sectionTitle}>RECENT</Text>
+        {/* Recent Services */}
+        <View style={styles.recentSectionHeading}>
+          <View style={styles.sectionTitleRow}>
+            <ClipboardList
+              size={19}
+              color={COLORS.navy}
+              strokeWidth={2.2}
+            />
+            <Text style={styles.sectionTitle}>
+              Recent Services
+            </Text>
+          </View>
 
           {services.length > 0 && (
             <Pressable
-              onPress={() => router.push('/(tabs)/services')}
+              style={styles.seeAllButton}
+              onPress={() =>
+                router.push('/(tabs)/services')
+              }
             >
-              <Text style={styles.viewAll}>View all</Text>
+              <Text style={styles.seeAll}>
+                See all
+              </Text>
+              <ChevronRight
+                size={15}
+                color={COLORS.blue}
+              />
             </Pressable>
           )}
         </View>
 
         {isLoadingServices ? (
-          <Text style={styles.statusText}>
-            Loading recent services...
-          </Text>
+          <MessageCard
+            description="Loading recent services..."
+          />
         ) : isServicesError ? (
           <Pressable
+            style={styles.errorCard}
             onPress={() => void refetchServices()}
           >
+            <AlertCircle
+              size={17}
+              color="#B91C1C"
+            />
             <Text style={styles.errorText}>
               Could not load services. Tap to retry.
             </Text>
           </Pressable>
         ) : recentServices.length === 0 ? (
-          <EmptyRecent />
+          <MessageCard
+            title="No service records yet"
+            description="Add your first service to start tracking your car."
+          />
         ) : (
-          <View>
+          <View style={styles.recentList}>
             {recentServices.map((service) => (
               <RecentService
                 key={service.id}
                 date={service.date}
                 name={service.title}
+                mileage={service.mileage}
                 cost={
                   service.cost != null
                     ? `${service.cost} ${
@@ -455,6 +671,96 @@ export default function HomeScreen() {
 
         <View style={styles.bottomSpace} />
       </ScrollView>
+    </ImageBackground>
+  );
+}
+
+function SectionHeading({
+  title,
+  icon,
+}: {
+  title: string;
+  icon: 'calendar' | 'settings';
+}) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionTitleRow}>
+        {icon === 'calendar' ? (
+          <CalendarClock
+            size={19}
+            color={COLORS.navy}
+            strokeWidth={2.2}
+          />
+        ) : (
+          <Settings2
+            size={19}
+            color={COLORS.navy}
+            strokeWidth={2.2}
+          />
+        )}
+
+        <Text style={styles.sectionTitle}>
+          {title}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function OverviewCount({
+  value,
+  label,
+  color,
+  background,
+  kind,
+}: {
+  value: number;
+  label: string;
+  color: string;
+  background: string;
+  kind: 'overdue' | 'dueSoon' | 'upcoming';
+}) {
+  return (
+    <View style={styles.overviewItem}>
+      <View
+        style={[
+          styles.overviewIcon,
+          { backgroundColor: background },
+        ]}
+      >
+        {kind === 'overdue' ? (
+          <AlertCircle
+            size={18}
+            color={color}
+            strokeWidth={2}
+          />
+        ) : kind === 'dueSoon' ? (
+          <Clock3
+            size={18}
+            color={color}
+            strokeWidth={2}
+          />
+        ) : (
+          <CheckCircle2
+            size={18}
+            color={color}
+            strokeWidth={2}
+          />
+        )}
+      </View>
+
+      <Text
+        style={[
+          styles.overviewValue,
+          { color },
+        ]}
+      >
+        {value}
+      </Text>
+
+      <Text style={styles.overviewLabel}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -462,11 +768,13 @@ export default function HomeScreen() {
 function RecentService({
   date,
   name,
+  mileage,
   cost,
   onPress,
 }: {
   date: string;
   name: string;
+  mileage: number;
   cost: string;
   onPress: () => void;
 }) {
@@ -475,37 +783,64 @@ function RecentService({
       style={styles.recentItem}
       onPress={onPress}
     >
-      <View style={styles.recentDate}>
-        <Text style={styles.dateText}>
-          {formatShortDate(date)}
-        </Text>
+      <View style={styles.recentIcon}>
+        <Wrench
+          size={19}
+          color={COLORS.blue}
+          strokeWidth={2}
+        />
       </View>
 
-      <View style={styles.recentInfo}>
-        <Text style={styles.recentName}>
+      <View style={styles.recentDetails}>
+        <Text
+          style={styles.recentName}
+          numberOfLines={2}
+        >
           {name}
         </Text>
+
+        <Text style={styles.recentMeta}>
+          {formatShortDate(date)}
+          {' · '}
+          {mileage.toLocaleString()} km
+        </Text>
       </View>
 
-      <Text style={styles.recentCost}>{cost}</Text>
+      <View style={styles.recentRight}>
+        <Text
+          style={styles.recentCost}
+          numberOfLines={1}
+        >
+          {cost}
+        </Text>
+
+        <ChevronRight
+          size={16}
+          color={COLORS.muted}
+        />
+      </View>
     </Pressable>
   );
 }
 
-function EmptyRecent() {
+function MessageCard({
+  title,
+  description,
+}: {
+  title?: string;
+  description: string;
+}) {
   return (
-    <View style={styles.emptyRecent}>
-      <Text style={styles.emptyRecentIcon}>🔧</Text>
-
-      <View style={styles.emptyRecentContent}>
-        <Text style={styles.emptyRecentTitle}>
-          No service records yet
+    <View style={styles.messageCard}>
+      {title && (
+        <Text style={styles.messageTitle}>
+          {title}
         </Text>
+      )}
 
-        <Text style={styles.emptyRecentText}>
-          Add your first service to start tracking your car.
-        </Text>
-      </View>
+      <Text style={styles.messageDescription}>
+        {description}
+      </Text>
     </View>
   );
 }
@@ -520,280 +855,500 @@ function formatShortDate(date: string) {
   return parsed.toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
+    year: 'numeric',
   });
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: '#F7F7F5',
+    backgroundColor: COLORS.sky,
   },
+
   content: {
-    padding: 20,
-    paddingTop: 60,
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 36,
   },
-  logo: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#171717',
+
+  header: {
+    paddingTop: 26,
+    paddingBottom: 20,
   },
-  greeting: {
-    fontSize: 15,
-    color: '#737373',
-    marginTop: 4,
-  },
-  carCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-    marginTop: 24,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  carInfo: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  carTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#171717',
-  },
-  carSubtitle: {
-    fontSize: 14,
-    color: '#737373',
-    marginTop: 5,
-  },
-  mileage: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#171717',
-  },
-  sectionHeader: {
-    marginTop: 32,
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-    color: '#737373',
-  },
-  maintenanceOverviewCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-  },
-  maintenanceCountRow: {
+
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    marginBottom: 13,
   },
-  maintenanceCountItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  maintenanceCount: {
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  overdueCount: {
-    color: '#C53030',
-  },
-  dueSoonCount: {
-    color: '#9A6700',
-  },
-  upcomingCount: {
-    color: '#276749',
-  },
-  maintenanceCountLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#737373',
-    marginTop: 4,
-  },
-  maintenanceCountDivider: {
-    width: 1,
-    height: 36,
-    backgroundColor: '#E5E7EB',
-  },
-  maintenanceOverviewFooter: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#737373',
-    marginTop: 18,
-    textAlign: 'center',
-  },
-  maintenanceUnconfigured: {
-    fontSize: 12,
-    color: '#9A6700',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  maintenanceEmptyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-  },
-  maintenanceEmptyTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#171717',
-  },
-  maintenanceEmptyText: {
-    fontSize: 13,
-    color: '#737373',
-    marginTop: 5,
-  },
-  nextServiceCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  serviceIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFF4B8',
+
+  brandIcon: {
+    width: 29,
+    height: 29,
+    borderRadius: 10,
+    backgroundColor: COLORS.yellow,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  serviceDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#F5C400',
+
+  brandLabel: {
+    color: COLORS.navy,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 2,
   },
-  nextServiceContent: {
-    marginLeft: 14,
+
+  pageTitle: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: COLORS.navy,
+    letterSpacing: -1,
+  },
+
+  headerSubtitle: {
+    fontSize: 13,
+    color: COLORS.muted,
+    marginTop: 5,
+  },
+
+  vehicleCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: 23,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E6F0F8',
+    shadowColor: '#245477',
+    shadowOpacity: 0.11,
+    shadowRadius: 14,
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    elevation: 3,
+  },
+
+  vehicleCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 14,
+  },
+
+  vehicleBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    backgroundColor: '#E6F4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+
+  vehicleDetails: {
     flex: 1,
   },
-  nextServiceTitle: {
+
+  vehicleName: {
     fontSize: 17,
-    fontWeight: '700',
-    color: '#171717',
+    fontWeight: '800',
+    color: COLORS.navy,
   },
-  nextServiceDistance: {
-    fontSize: 14,
-    color: '#737373',
+
+  vehicleSubtitle: {
+    fontSize: 12,
+    color: COLORS.muted,
     marginTop: 4,
   },
-  nextServiceStatus: {
+
+  vehicleIllustration: {
+    width: '100%',
+    height: 180,
+    backgroundColor: '#A6DAFC',
+  },
+
+  vehicleCardFooter: {
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  vehicleFooterLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+
+  vehicleFooterText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.muted,
+  },
+
+  vehicleFooterRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+
+  vehicleFooterLink: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.blue,
+  },
+
+  statsRow: {
+    flexDirection: 'row',
+    gap: 9,
+    marginTop: 15,
+  },
+
+  statCard: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: 19,
+    paddingVertical: 15,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  statIconBlue: {
+    width: 37,
+    height: 37,
+    borderRadius: 13,
+    backgroundColor: '#E7F4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 9,
+  },
+
+  statIconYellow: {
+    width: 37,
+    height: 37,
+    borderRadius: 13,
+    backgroundColor: '#FFF3C8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 9,
+  },
+
+  statValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: COLORS.navy,
+  },
+
+  statLabel: {
     fontSize: 12,
     fontWeight: '700',
+    color: COLORS.navy,
+    marginTop: 5,
+    textAlign: 'center',
+  },
+
+  statUnit: {
+    fontSize: 10,
+    color: COLORS.muted,
+    marginTop: 2,
+  },
+
+  sectionHeader: {
+    marginTop: 27,
+    marginBottom: 12,
+  },
+
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.navy,
+    letterSpacing: -0.4,
+  },
+
+  upcomingCard: {
+    backgroundColor: 'rgba(255, 247, 222, 0.97)',
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: '#FFE09A',
+    padding: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  upcomingIcon: {
+    width: 51,
+    height: 51,
+    borderRadius: 17,
+    backgroundColor: COLORS.yellow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 13,
+  },
+
+  upcomingInfo: {
+    flex: 1,
+  },
+
+  upcomingEyebrow: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#A67A13',
+    letterSpacing: 1.2,
+    marginBottom: 5,
+  },
+
+  upcomingTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.navy,
+  },
+
+  upcomingDescription: {
+    fontSize: 12,
+    color: '#516D87',
+    marginTop: 5,
+  },
+
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     marginTop: 7,
   },
-  nextServiceOverdue: {
-    color: '#C53030',
+
+  upcomingStatus: {
+    fontSize: 12,
+    fontWeight: '800',
   },
-  nextServiceDueSoon: {
-    color: '#9A6700',
+
+  overdueText: {
+    color: COLORS.red,
   },
-  nextServiceUpcoming: {
-    color: '#276749',
+
+  dueSoonText: {
+    color: '#A57900',
   },
-  nextServiceTime: {
-    fontSize: 13,
-    color: '#A3A3A3',
-    marginTop: 5,
+
+  upcomingText: {
+    color: COLORS.green,
   },
-  addButton: {
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: '#F5C400',
+
+  overviewCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: 21,
+    padding: 17,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  overviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  overviewItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+
+  overviewIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
+    marginBottom: 6,
   },
-  addButtonText: {
-    fontSize: 16,
+
+  overviewValue: {
+    fontSize: 26,
+    fontWeight: '900',
+  },
+
+  overviewLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.muted,
+    marginTop: 4,
+  },
+
+  overviewDivider: {
+    width: 1,
+    height: 45,
+    backgroundColor: COLORS.border,
+  },
+
+  overviewFooter: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 17,
+    borderTopWidth: 1,
+    borderTopColor: '#EDF3F8',
+    paddingTop: 13,
+  },
+
+  overviewFooterText: {
+    fontSize: 12,
     fontWeight: '700',
-    color: '#171717',
+    color: COLORS.blue,
+    textAlign: 'center',
   },
-  recentHeader: {
-    marginTop: 32,
+
+  unconfiguredText: {
+    fontSize: 12,
+    color: '#A77815',
+    marginTop: 9,
+    textAlign: 'center',
+  },
+
+  addServiceButton: {
+    marginTop: 19,
+    height: 54,
+    borderRadius: 17,
+    backgroundColor: COLORS.yellow,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    shadowColor: '#C89112',
+    shadowOpacity: 0.14,
+    shadowRadius: 9,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    elevation: 2,
+  },
+
+  addServiceButtonText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: COLORS.navy,
+  },
+
+  recentSectionHeading: {
+    marginTop: 27,
     marginBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  viewAll: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#171717',
+
+  seeAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1,
   },
+
+  seeAll: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.blue,
+  },
+
+  recentList: {
+    gap: 9,
+  },
+
   recentItem: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    minHeight: 64,
-    paddingHorizontal: 16,
-    marginBottom: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 13,
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 73,
   },
-  recentDate: {
-    width: 65,
+
+  recentIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#EAF5FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 11,
   },
-  dateText: {
-    fontSize: 13,
-    color: '#737373',
-  },
-  recentInfo: {
+
+  recentDetails: {
     flex: 1,
-    paddingHorizontal: 8,
+    paddingRight: 7,
   },
+
   recentName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#171717',
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.navy,
   },
+
+  recentMeta: {
+    fontSize: 11,
+    color: COLORS.muted,
+    marginTop: 5,
+  },
+
+  recentRight: {
+    alignItems: 'flex-end',
+    gap: 6,
+    maxWidth: 100,
+  },
+
   recentCost: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#171717',
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.navy,
   },
-  emptyRecent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+
+  messageCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: 18,
     padding: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  emptyRecentIcon: {
-    fontSize: 28,
-    marginRight: 14,
-  },
-  emptyRecentContent: {
-    flex: 1,
-  },
-  emptyRecentTitle: {
+
+  messageTitle: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#171717',
+    fontWeight: '800',
+    color: COLORS.navy,
   },
-  emptyRecentText: {
+
+  messageDescription: {
     fontSize: 13,
-    color: '#737373',
-    marginTop: 3,
-  },
-  bottomSpace: {
-    height: 30,
-  },
-  statusText: {
-    fontSize: 14,
-    color: '#737373',
-    marginTop: 8,
-  },
-  errorText: {
-    fontSize: 13,
-    color: '#B91C1C',
+    color: COLORS.muted,
     marginTop: 6,
   },
-  retryText: {
+
+  errorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginTop: 12,
+    padding: 14,
+    backgroundColor: '#FFF1F1',
+    borderRadius: 12,
+  },
+
+  errorText: {
+    flex: 1,
     fontSize: 13,
     color: '#B91C1C',
-    marginTop: 10,
+  },
+
+  bottomSpace: {
+    height: 28,
   },
 });
