@@ -1,27 +1,34 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
+import { useRef, useState } from 'react';
+
+import { useAuth } from '../../auth/AuthContext';
+import { useProfileMenu } from '../../components/ProfileMenuContext';
 
 import {
     AlertCircle,
+    Bell,
     CalendarClock,
     CarFront,
     CheckCircle2,
     ChevronRight,
     ClipboardList,
-    Clock3,
     FileText,
     Gauge,
+    LogOut,
     Plus,
-    Settings2,
+    UserRound,
     Wrench,
+    X,
 } from 'lucide-react-native';
 
 import {
+    Animated,
     Image,
     ImageBackground,
+    Modal,
     Pressable,
-    ScrollView,
     StyleSheet,
     Text,
     View,
@@ -74,6 +81,86 @@ async function fetchCarServices(
 }
 
 export default function HomeScreen() {
+  // -----------------------------------
+  // AUTHENTICATION
+  // -----------------------------------
+
+  const { user, logout } = useAuth();
+
+  const { openProfile } = useProfileMenu();
+
+  const initials = (
+    [
+      user?.firstName?.[0],
+      user?.lastName?.[0],
+    ]
+      .filter(Boolean)
+      .join('') ||
+    user?.username?.[0] ||
+    'U'
+  ).toUpperCase();
+
+  const [profileVisible, setProfileVisible] =
+    useState(false);
+
+  const displayName =
+    [user?.firstName, user?.lastName]
+      .filter(Boolean)
+      .join(' ') ||
+    user?.username ||
+    'My Profile';
+
+  const closeProfile = () => {
+    setProfileVisible(false);
+  };
+
+  const openMore = () => {
+    closeProfile();
+    router.push('/(tabs)/more');
+  };
+
+  const openTelegramSettings = () => {
+    closeProfile();
+
+    // Telegram settings are accessible through More.
+    // Change this route if your project has a
+    // dedicated notifications screen.
+    router.push('/(tabs)/more');
+  };
+
+  const handleLogout = async () => {
+    closeProfile();
+
+    try {
+      await logout();
+      router.replace('/login');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
+  // -----------------------------------
+  // ANIMATED HEADER
+  // -----------------------------------
+
+  const scrollY = useRef(
+    new Animated.Value(0),
+  ).current;
+
+  const headerBackgroundColor =
+    scrollY.interpolate({
+      inputRange: [0, 100],
+      outputRange: [
+        'rgba(255,204,50,0)',
+        'rgba(255,204,50,1)',
+      ],
+      extrapolate: 'clamp',
+    });
+
+  // -----------------------------------
+  // CARS
+  // -----------------------------------
+
   const {
     data: cars = [],
     isLoading: isLoadingCars,
@@ -86,12 +173,18 @@ export default function HomeScreen() {
   );
 
   const selectedCar =
-    cars.find((car) => car.id === storedSelectedCarId) ??
+    cars.find(
+      (car) => car.id === storedSelectedCarId,
+    ) ??
     cars.find((car) => car.isPrimary) ??
     cars[0] ??
     null;
 
   const selectedCarId = selectedCar?.id;
+
+  // -----------------------------------
+  // SERVICES
+  // -----------------------------------
 
   const {
     data: services = [],
@@ -99,24 +192,37 @@ export default function HomeScreen() {
     isError: isServicesError,
     refetch: refetchServices,
   } = useQuery({
-    queryKey: ['cars', selectedCarId, 'services'],
-    queryFn: () => fetchCarServices(selectedCarId!),
+    queryKey: [
+      'cars',
+      selectedCarId,
+      'services',
+    ],
+    queryFn: () =>
+      fetchCarServices(selectedCarId!),
     enabled: Boolean(selectedCarId),
   });
+
+  // -----------------------------------
+  // MAINTENANCE
+  // -----------------------------------
 
   const {
     data: maintenanceSchedules = [],
     isLoading: isLoadingMaintenance,
     isError: isMaintenanceError,
     refetch: refetchMaintenance,
-  } = useCarMaintenanceSchedules(selectedCarId ?? '');
-
-  const maintenanceOverview = calculateMaintenanceOverview(
-    maintenanceSchedules,
-    selectedCar?.mileage ?? 0,
+  } = useCarMaintenanceSchedules(
+    selectedCarId ?? '',
   );
 
-  const maintenanceCounts = maintenanceOverview.counts;
+  const maintenanceOverview =
+    calculateMaintenanceOverview(
+      maintenanceSchedules,
+      selectedCar?.mileage ?? 0,
+    );
+
+  const maintenanceCounts =
+    maintenanceOverview.counts;
 
   const nextMaintenance = selectedCar
     ? findNextMaintenance(
@@ -133,11 +239,21 @@ export default function HomeScreen() {
     )
     .slice(0, 3);
 
+  const maintenanceAttentionCount =
+    maintenanceCounts.dueSoon +
+    maintenanceCounts.overdue;
+
+  // -----------------------------------
+  // NAVIGATION
+  // -----------------------------------
+
   const openSelectedCar = () => {
     if (selectedCarId) {
       router.push({
         pathname: '/car/[id]',
-        params: { id: selectedCarId },
+        params: {
+          id: selectedCarId,
+        },
       });
     } else {
       router.push('/(tabs)/cars');
@@ -153,6 +269,7 @@ export default function HomeScreen() {
           carId: selectedCarId,
         },
       });
+
       return;
     }
 
@@ -167,9 +284,15 @@ export default function HomeScreen() {
 
     router.push({
       pathname: '/service/new',
-      params: { vehicleId: selectedCarId },
+      params: {
+        vehicleId: selectedCarId,
+      },
     });
   };
+
+  // -----------------------------------
+  // DISPLAY VALUES
+  // -----------------------------------
 
   const nextServiceTitle = !selectedCar
     ? 'No car selected'
@@ -178,7 +301,9 @@ export default function HomeScreen() {
       : isMaintenanceError
         ? 'Maintenance unavailable'
         : nextMaintenance
-          ? getMaintenanceName(nextMaintenance.schedule)
+          ? getMaintenanceName(
+              nextMaintenance.schedule,
+            )
           : 'Not configured yet';
 
   const nextServiceDescription = !selectedCar
@@ -188,53 +313,51 @@ export default function HomeScreen() {
       : isMaintenanceError
         ? 'Could not check maintenance'
         : nextMaintenance
-          ? formatMaintenanceDeadline(nextMaintenance.result)
+          ? formatMaintenanceDeadline(
+              nextMaintenance.result,
+            )
           : 'Set up a maintenance schedule';
 
   const nextServiceStatus =
     nextMaintenance?.result.label ?? null;
 
-  const maintenanceAttentionCount =
-    maintenanceCounts.dueSoon +
-    maintenanceCounts.overdue;
+  // -----------------------------------
+  // RENDER
+  // -----------------------------------
 
   return (
     <ImageBackground
-      source={require('../../../assets/images/lovablecar-main-background.png')}
+      source={require(
+        '../../../assets/images/lovablecar-main-background.png'
+      )}
       style={styles.screen}
       resizeMode="cover"
+      blurRadius={7}
     >
-      <ScrollView
+      {/* SCROLLABLE CONTENT */}
+
+      <Animated.ScrollView
+        onScroll={Animated.event(
+          [
+            {
+              nativeEvent: {
+                contentOffset: {
+                  y: scrollY,
+                },
+              },
+            },
+          ],
+          {
+            useNativeDriver: false,
+          },
+        )}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.brandRow}>
-            <View style={styles.brandIcon}>
-              <CarFront
-                size={19}
-                color={COLORS.navy}
-                strokeWidth={2.4}
-              />
-            </View>
+        {/* VEHICLE CARD */}
 
-            <Text style={styles.brandLabel}>
-              LOVABLECAR
-            </Text>
-          </View>
-
-          <Text style={styles.pageTitle}>
-            My Cars
-          </Text>
-
-          <Text style={styles.headerSubtitle}>
-            Everything your car needs, in one place
-          </Text>
-        </View>
-
-        {/* Vehicle Card */}
         <Pressable
           style={styles.vehicleCard}
           onPress={openSelectedCar}
@@ -271,13 +394,14 @@ export default function HomeScreen() {
             <ChevronRight
               size={21}
               color={COLORS.muted}
-              strokeWidth={2}
             />
           </View>
 
           {selectedCar && (
             <Image
-              source={require('../../../assets/images/lovablecar-background.png')}
+              source={require(
+                '../../../assets/images/lovablecar-background.png'
+              )}
               style={styles.vehicleIllustration}
               resizeMode="cover"
             />
@@ -290,6 +414,7 @@ export default function HomeScreen() {
                 color={COLORS.green}
                 strokeWidth={2.2}
               />
+
               <Text style={styles.vehicleFooterText}>
                 Vehicle overview
               </Text>
@@ -299,6 +424,7 @@ export default function HomeScreen() {
               <Text style={styles.vehicleFooterLink}>
                 View details
               </Text>
+
               <ChevronRight
                 size={15}
                 color={COLORS.blue}
@@ -306,6 +432,8 @@ export default function HomeScreen() {
             </View>
           </View>
         </Pressable>
+
+        {/* ERROR */}
 
         {isCarsError && (
           <Pressable
@@ -316,13 +444,15 @@ export default function HomeScreen() {
               size={17}
               color="#B91C1C"
             />
+
             <Text style={styles.errorText}>
               Could not load cars. Tap to retry.
             </Text>
           </Pressable>
         )}
 
-        {/* Statistics */}
+        {/* STATISTICS */}
+
         <View style={styles.statsRow}>
           <Pressable
             style={styles.statCard}
@@ -332,7 +462,6 @@ export default function HomeScreen() {
               <Gauge
                 size={20}
                 color={COLORS.blue}
-                strokeWidth={2}
               />
             </View>
 
@@ -349,6 +478,7 @@ export default function HomeScreen() {
             <Text style={styles.statLabel}>
               Mileage
             </Text>
+
             <Text style={styles.statUnit}>
               km
             </Text>
@@ -361,216 +491,179 @@ export default function HomeScreen() {
             }
           >
             <View style={styles.statIconBlue}>
-              <FileText
+              <ClipboardList
                 size={20}
                 color={COLORS.blue}
-                strokeWidth={2}
               />
             </View>
 
             <Text style={styles.statValue}>
-              {isLoadingServices
-                ? '…'
-                : isServicesError
-                  ? '—'
-                  : services.length}
+              {services.length}
             </Text>
 
             <Text style={styles.statLabel}>
               Services
             </Text>
-            <Text style={styles.statUnit}>
-              records
-            </Text>
           </Pressable>
 
           <Pressable
             style={styles.statCard}
-            onPress={openSelectedCar}
+            onPress={openNextMaintenance}
           >
             <View style={styles.statIconYellow}>
               <CalendarClock
                 size={20}
-                color="#A77900"
-                strokeWidth={2}
+                color={COLORS.navy}
               />
             </View>
 
             <Text style={styles.statValue}>
-              {!selectedCar ||
-              isLoadingMaintenance ||
-              isMaintenanceError
-                ? '—'
-                : maintenanceAttentionCount}
+              {maintenanceAttentionCount}
             </Text>
 
             <Text style={styles.statLabel}>
               Attention
             </Text>
-            <Text style={styles.statUnit}>
-              items
+          </Pressable>
+        </View>
+
+        {/* UPCOMING SERVICE */}
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            Upcoming Service
+          </Text>
+
+          <Pressable onPress={openSelectedCar}>
+            <Text style={styles.sectionLink}>
+              See all
             </Text>
           </Pressable>
         </View>
 
-        {/* Upcoming Service */}
-        <SectionHeading
-          title="Upcoming Service"
-          icon="calendar"
-        />
-
         <Pressable
-          style={styles.upcomingCard}
+          style={styles.maintenanceCard}
           onPress={openNextMaintenance}
         >
-          <View style={styles.upcomingIcon}>
+          <View style={styles.maintenanceIcon}>
             <Wrench
-              size={23}
+              size={24}
               color={COLORS.navy}
-              strokeWidth={2.2}
             />
           </View>
 
-          <View style={styles.upcomingInfo}>
-            <Text style={styles.upcomingEyebrow}>
-              NEXT MAINTENANCE
-            </Text>
-
-            <Text style={styles.upcomingTitle}>
+          <View style={styles.maintenanceInfo}>
+            <Text style={styles.maintenanceTitle}>
               {nextServiceTitle}
             </Text>
 
-            <Text style={styles.upcomingDescription}>
+            <Text style={styles.maintenanceSubtitle}>
               {nextServiceDescription}
             </Text>
 
             {nextServiceStatus && (
-              <View style={styles.statusRow}>
-                <Clock3
-                  size={13}
-                  color={
-                    nextMaintenance?.result.status ===
-                    'OVERDUE'
-                      ? COLORS.red
-                      : nextMaintenance?.result.status ===
-                          'DUE_SOON'
-                        ? COLORS.amber
-                        : COLORS.green
-                  }
-                />
-
-                <Text
-                  style={[
-                    styles.upcomingStatus,
-                    nextMaintenance?.result.status ===
-                    'OVERDUE'
-                      ? styles.overdueText
-                      : nextMaintenance?.result.status ===
-                          'DUE_SOON'
-                        ? styles.dueSoonText
-                        : styles.upcomingText,
-                  ]}
-                >
-                  {nextServiceStatus}
-                </Text>
-              </View>
+              <Text style={styles.maintenanceStatus}>
+                {nextServiceStatus}
+              </Text>
             )}
           </View>
 
           <ChevronRight
             size={20}
-            color="#9E7B24"
+            color={COLORS.muted}
           />
         </Pressable>
 
-        {/* Maintenance Overview */}
-        <SectionHeading
-          title="Maintenance Overview"
-          icon="settings"
-        />
+        {/* RECENT SERVICES */}
 
-        {!selectedCar ? (
-          <MessageCard
-            title="No car selected"
-            description="Add or select a car to see maintenance reminders."
-          />
-        ) : isLoadingMaintenance ? (
-          <MessageCard
-            description="Loading maintenance schedules..."
-          />
-        ) : isMaintenanceError ? (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            Recent Services
+          </Text>
+
           <Pressable
-            style={styles.errorCard}
-            onPress={() => void refetchMaintenance()}
+            onPress={() =>
+              router.push('/(tabs)/services')
+            }
           >
-            <AlertCircle
-              size={17}
-              color="#B91C1C"
-            />
-            <Text style={styles.errorText}>
-              Could not load maintenance schedules. Tap to retry.
+            <Text style={styles.sectionLink}>
+              See all
             </Text>
           </Pressable>
-        ) : (
+        </View>
+
+        {recentServices.map((service) => (
           <Pressable
-            style={styles.overviewCard}
-            onPress={openSelectedCar}
+            key={service.id}
+            style={styles.serviceCard}
+            onPress={() =>
+              router.push({
+                pathname: '/service/[id]',
+                params: {
+                  id: service.id,
+                },
+              })
+            }
           >
-            <View style={styles.overviewRow}>
-              <OverviewCount
-                value={maintenanceCounts.overdue}
-                label="Overdue"
-                color={COLORS.red}
-                background="#FFF0EE"
-                kind="overdue"
-              />
-
-              <View style={styles.overviewDivider} />
-
-              <OverviewCount
-                value={maintenanceCounts.dueSoon}
-                label="Due soon"
-                color={COLORS.amber}
-                background="#FFF7DF"
-                kind="dueSoon"
-              />
-
-              <View style={styles.overviewDivider} />
-
-              <OverviewCount
-                value={maintenanceCounts.upcoming}
-                label="Upcoming"
-                color={COLORS.green}
-                background="#E7F7F3"
-                kind="upcoming"
-              />
-            </View>
-
-            <View style={styles.overviewFooter}>
-              <Text style={styles.overviewFooterText}>
-                {maintenanceCounts.configured === 0
-                  ? 'No maintenance due dates configured yet'
-                  : 'View maintenance schedules'}
-              </Text>
-
-              <ChevronRight
-                size={16}
+            <View style={styles.serviceIcon}>
+              <Wrench
+                size={20}
                 color={COLORS.blue}
               />
             </View>
 
-            {maintenanceCounts.unconfigured > 0 && (
-              <Text style={styles.unconfiguredText}>
-                {maintenanceCounts.unconfigured}{' '}
-                {maintenanceCounts.unconfigured === 1
-                  ? 'enabled schedule needs configuration'
-                  : 'enabled schedules need configuration'}
+            <View style={styles.serviceInfo}>
+              <Text style={styles.serviceTitle}>
+                {service.title}
               </Text>
-            )}
+
+              <Text style={styles.serviceSubtitle}>
+                {new Date(
+                  service.date,
+                ).toLocaleDateString()}
+                {' · '}
+                {service.mileage.toLocaleString()} km
+              </Text>
+            </View>
+
+            <ChevronRight
+              size={18}
+              color={COLORS.muted}
+            />
           </Pressable>
+        ))}
+
+        {recentServices.length === 0 && (
+          <View style={styles.emptyServices}>
+            <FileText
+              size={24}
+              color={COLORS.muted}
+            />
+
+            <Text style={styles.emptyText}>
+              {isLoadingServices
+                ? 'Loading services...'
+                : isServicesError
+                  ? 'Services unavailable'
+                  : 'No service records yet'}
+            </Text>
+
+            {isServicesError && (
+              <Pressable
+                onPress={() =>
+                  void refetchServices()
+                }
+              >
+                <Text style={styles.sectionLink}>
+                  Retry
+                </Text>
+              </Pressable>
+            )}
+          </View>
         )}
 
-        {/* Add Service */}
+        {/* ADD SERVICE */}
+
         <Pressable
           style={styles.addServiceButton}
           onPress={handleAddService}
@@ -578,371 +671,364 @@ export default function HomeScreen() {
           <Plus
             size={21}
             color={COLORS.navy}
-            strokeWidth={2.8}
           />
-          <Text style={styles.addServiceButtonText}>
+
+          <Text style={styles.addServiceText}>
             Add Service
           </Text>
         </Pressable>
+      </Animated.ScrollView>
 
-        {/* Recent Services */}
-        <View style={styles.recentSectionHeading}>
-          <View style={styles.sectionTitleRow}>
-            <ClipboardList
-              size={19}
-              color={COLORS.navy}
-              strokeWidth={2.2}
+      {/* FIXED ANIMATED HEADER */}
+
+      <Animated.View
+        style={[
+          styles.animatedHeader,
+          {
+            backgroundColor: headerBackgroundColor,
+          },
+        ]}
+      >
+        <Text style={styles.headerTitle}>
+          LovableCar
+        </Text>
+
+        <Pressable
+          onPress={openProfile}
+          style={styles.headerAction}
+          accessibilityRole="button"
+          accessibilityLabel="Open profile"
+        >
+          {user?.photoUrl ? (
+            <Image
+              source={{ uri: user.photoUrl }}
+              style={styles.profileAvatar}
             />
-            <Text style={styles.sectionTitle}>
-              Recent Services
-            </Text>
-          </View>
-
-          {services.length > 0 && (
-            <Pressable
-              style={styles.seeAllButton}
-              onPress={() =>
-                router.push('/(tabs)/services')
-              }
-            >
-              <Text style={styles.seeAll}>
-                See all
+          ) : (
+            <View style={styles.profileAvatarFallback}>
+              <Text style={styles.profileInitials}>
+                {initials}
               </Text>
+            </View>
+          )}
+        </Pressable>
+      </Animated.View>
+
+      {/* PROFILE POPUP */}
+
+      <Modal
+        visible={profileVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={closeProfile}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={closeProfile}
+        >
+          <Pressable
+            style={styles.profilePopup}
+            onPress={(event) =>
+              event.stopPropagation()
+            }
+          >
+            {/* PROFILE HEADER */}
+
+            <View style={styles.popupHeader}>
+              <View style={styles.popupUserRow}>
+                {user?.photoUrl ? (
+                  <Image
+                    source={{
+                      uri: user.photoUrl,
+                    }}
+                    style={styles.popupAvatar}
+                  />
+                ) : (
+                  <View
+                    style={styles.popupAvatarFallback}
+                  >
+                    <UserRound
+                      size={26}
+                      color={COLORS.navy}
+                    />
+                  </View>
+                )}
+
+                <View style={styles.popupUserInfo}>
+                  <Text
+                    style={styles.popupUserName}
+                    numberOfLines={1}
+                  >
+                    {displayName}
+                  </Text>
+
+                  {user?.username && (
+                    <Text
+                      style={styles.popupUsername}
+                      numberOfLines={1}
+                    >
+                      @{user.username}
+                    </Text>
+                  )}
+                </View>
+
+                <Pressable
+                  onPress={closeProfile}
+                  style={styles.popupCloseButton}
+                >
+                  <X
+                    size={20}
+                    color={COLORS.muted}
+                  />
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.popupDivider} />
+
+            {/* MY PROFILE */}
+
+            <Pressable
+              style={styles.popupItem}
+              onPress={openMore}
+            >
+              <UserRound
+                size={20}
+                color={COLORS.navy}
+              />
+
+              <Text style={styles.popupItemText}>
+                My Profile
+              </Text>
+
               <ChevronRight
-                size={15}
-                color={COLORS.blue}
+                size={18}
+                color={COLORS.muted}
               />
             </Pressable>
-          )}
-        </View>
 
-        {isLoadingServices ? (
-          <MessageCard
-            description="Loading recent services..."
-          />
-        ) : isServicesError ? (
-          <Pressable
-            style={styles.errorCard}
-            onPress={() => void refetchServices()}
-          >
-            <AlertCircle
-              size={17}
-              color="#B91C1C"
-            />
-            <Text style={styles.errorText}>
-              Could not load services. Tap to retry.
-            </Text>
-          </Pressable>
-        ) : recentServices.length === 0 ? (
-          <MessageCard
-            title="No service records yet"
-            description="Add your first service to start tracking your car."
-          />
-        ) : (
-          <View style={styles.recentList}>
-            {recentServices.map((service) => (
-              <RecentService
-                key={service.id}
-                date={service.date}
-                name={service.title}
-                mileage={service.mileage}
-                cost={
-                  service.cost != null
-                    ? `${service.cost} ${
-                        service.currency ?? ''
-                      }`.trim()
-                    : '—'
-                }
-                onPress={() => {
-                  if (!selectedCarId) return;
+            {/* TELEGRAM NOTIFICATIONS */}
 
-                  router.push({
-                    pathname: '/service/[id]',
-                    params: {
-                      id: service.id,
-                      vehicleId: selectedCarId,
-                    },
-                  });
-                }}
+            <Pressable
+              style={styles.popupItem}
+              onPress={openTelegramSettings}
+            >
+              <Bell
+                size={20}
+                color={COLORS.navy}
               />
-            ))}
-          </View>
-        )}
 
-        <View style={styles.bottomSpace} />
-      </ScrollView>
+              <Text style={styles.popupItemText}>
+                Telegram Notifications
+              </Text>
+
+              <ChevronRight
+                size={18}
+                color={COLORS.muted}
+              />
+            </Pressable>
+
+            <View style={styles.popupDivider} />
+
+            {/* LOGOUT */}
+
+            <Pressable
+              style={styles.popupItem}
+              onPress={() =>
+                void handleLogout()
+              }
+            >
+              <LogOut
+                size={20}
+                color={COLORS.red}
+              />
+
+              <Text
+                style={[
+                  styles.popupItemText,
+                  {
+                    color: COLORS.red,
+                  },
+                ]}
+              >
+                Log Out
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ImageBackground>
   );
 }
 
-function SectionHeading({
-  title,
-  icon,
-}: {
-  title: string;
-  icon: 'calendar' | 'settings';
-}) {
-  return (
-    <View style={styles.sectionHeader}>
-      <View style={styles.sectionTitleRow}>
-        {icon === 'calendar' ? (
-          <CalendarClock
-            size={19}
-            color={COLORS.navy}
-            strokeWidth={2.2}
-          />
-        ) : (
-          <Settings2
-            size={19}
-            color={COLORS.navy}
-            strokeWidth={2.2}
-          />
-        )}
-
-        <Text style={styles.sectionTitle}>
-          {title}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function OverviewCount({
-  value,
-  label,
-  color,
-  background,
-  kind,
-}: {
-  value: number;
-  label: string;
-  color: string;
-  background: string;
-  kind: 'overdue' | 'dueSoon' | 'upcoming';
-}) {
-  return (
-    <View style={styles.overviewItem}>
-      <View
-        style={[
-          styles.overviewIcon,
-          { backgroundColor: background },
-        ]}
-      >
-        {kind === 'overdue' ? (
-          <AlertCircle
-            size={18}
-            color={color}
-            strokeWidth={2}
-          />
-        ) : kind === 'dueSoon' ? (
-          <Clock3
-            size={18}
-            color={color}
-            strokeWidth={2}
-          />
-        ) : (
-          <CheckCircle2
-            size={18}
-            color={color}
-            strokeWidth={2}
-          />
-        )}
-      </View>
-
-      <Text
-        style={[
-          styles.overviewValue,
-          { color },
-        ]}
-      >
-        {value}
-      </Text>
-
-      <Text style={styles.overviewLabel}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function RecentService({
-  date,
-  name,
-  mileage,
-  cost,
-  onPress,
-}: {
-  date: string;
-  name: string;
-  mileage: number;
-  cost: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      style={styles.recentItem}
-      onPress={onPress}
-    >
-      <View style={styles.recentIcon}>
-        <Wrench
-          size={19}
-          color={COLORS.blue}
-          strokeWidth={2}
-        />
-      </View>
-
-      <View style={styles.recentDetails}>
-        <Text
-          style={styles.recentName}
-          numberOfLines={2}
-        >
-          {name}
-        </Text>
-
-        <Text style={styles.recentMeta}>
-          {formatShortDate(date)}
-          {' · '}
-          {mileage.toLocaleString()} km
-        </Text>
-      </View>
-
-      <View style={styles.recentRight}>
-        <Text
-          style={styles.recentCost}
-          numberOfLines={1}
-        >
-          {cost}
-        </Text>
-
-        <ChevronRight
-          size={16}
-          color={COLORS.muted}
-        />
-      </View>
-    </Pressable>
-  );
-}
-
-function MessageCard({
-  title,
-  description,
-}: {
-  title?: string;
-  description: string;
-}) {
-  return (
-    <View style={styles.messageCard}>
-      {title && (
-        <Text style={styles.messageTitle}>
-          {title}
-        </Text>
-      )}
-
-      <Text style={styles.messageDescription}>
-        {description}
-      </Text>
-    </View>
-  );
-}
-
-function formatShortDate(date: string) {
-  const parsed = new Date(date);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return date;
-  }
-
-  return parsed.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
+// -----------------------------------
+// STYLES
+// -----------------------------------
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.sky,
+    height: '100%',
+    width: '100%',
   },
 
   content: {
-    flexGrow: 1,
+    paddingTop: 105,
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+  },
+
+  // ANIMATED HEADER
+
+  animatedHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 70,
     paddingHorizontal: 20,
-    paddingBottom: 36,
-  },
-
-  header: {
-    paddingTop: 26,
-    paddingBottom: 20,
-  },
-
-  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 13,
+    justifyContent: 'space-between',
+    zIndex: 100,
+    elevation: 10,
   },
 
-  brandIcon: {
-    width: 29,
-    height: 29,
-    borderRadius: 10,
-    backgroundColor: COLORS.yellow,
+  headerTitle: {
+    color: COLORS.navy,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+
+  headerAction: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  brandLabel: {
-    color: COLORS.navy,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 2,
+
+  // PROFILE MODAL
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(9,39,71,0.25)',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    paddingTop: 90,
+    paddingHorizontal: 16,
   },
 
-  pageTitle: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: COLORS.navy,
-    letterSpacing: -1,
-  },
-
-  headerSubtitle: {
-    fontSize: 13,
-    color: COLORS.muted,
-    marginTop: 5,
-  },
-
-  vehicleCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderRadius: 23,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E6F0F8',
-    shadowColor: '#245477',
-    shadowOpacity: 0.11,
-    shadowRadius: 14,
+  profilePopup: {
+    width: 300,
+    maxWidth: '100%',
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    paddingVertical: 12,
+    shadowColor: COLORS.navy,
     shadowOffset: {
       width: 0,
-      height: 6,
+      height: 8,
     },
-    elevation: 3,
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+
+  popupHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+
+  popupUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  popupUserInfo: {
+    flex: 1,
+  },
+
+  popupAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+
+  popupAvatarFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#E6F3FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  popupUserName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.navy,
+  },
+
+  popupUsername: {
+    marginTop: 3,
+    fontSize: 12,
+    color: COLORS.muted,
+  },
+
+  popupCloseButton: {
+    padding: 4,
+  },
+
+  popupDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 8,
+  },
+
+  popupItem: {
+    minHeight: 48,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  popupItemText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.navy,
+  },
+
+  // VEHICLE CARD
+
+  vehicleCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 16,
   },
 
   vehicleCardTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 15,
-    paddingVertical: 14,
+    padding: 16,
+    gap: 12,
   },
 
   vehicleBadge: {
     width: 46,
     height: 46,
-    borderRadius: 15,
-    backgroundColor: '#E6F4FF',
-    alignItems: 'center',
+    borderRadius: 23,
+    borderWidth: 2,
+    borderColor: COLORS.blue,
     justifyContent: 'center',
-    marginRight: 12,
+    alignItems: 'center',
   },
 
   vehicleDetails: {
@@ -950,25 +1036,24 @@ const styles = StyleSheet.create({
   },
 
   vehicleName: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
     color: COLORS.navy,
   },
 
   vehicleSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.muted,
     marginTop: 4,
   },
 
   vehicleIllustration: {
     width: '100%',
-    height: 180,
-    backgroundColor: '#A6DAFC',
+    height: 160,
   },
 
   vehicleCardFooter: {
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
     paddingVertical: 13,
     flexDirection: 'row',
     alignItems: 'center',
@@ -981,374 +1066,249 @@ const styles = StyleSheet.create({
     gap: 6,
   },
 
-  vehicleFooterText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.muted,
-  },
-
   vehicleFooterRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 3,
+  },
+
+  vehicleFooterText: {
+    fontSize: 12,
+    color: COLORS.green,
   },
 
   vehicleFooterLink: {
     fontSize: 12,
-    fontWeight: '800',
     color: COLORS.blue,
+    fontWeight: '700',
   },
+
+  // ERROR
+
+  errorCard: {
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#FEE2E2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+
+  errorText: {
+    color: '#B91C1C',
+    fontSize: 13,
+  },
+
+  // STATISTICS
 
   statsRow: {
     flexDirection: 'row',
-    gap: 9,
-    marginTop: 15,
+    gap: 8,
+    marginBottom: 28,
   },
 
   statCard: {
     flex: 1,
-    minWidth: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderRadius: 19,
-    paddingVertical: 15,
-    paddingHorizontal: 6,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 12,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    minHeight: 110,
   },
 
   statIconBlue: {
-    width: 37,
-    height: 37,
-    borderRadius: 13,
-    backgroundColor: '#E7F4FF',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E6F3FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 9,
   },
 
   statIconYellow: {
-    width: 37,
-    height: 37,
-    borderRadius: 13,
-    backgroundColor: '#FFF3C8',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF1BE',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 9,
   },
 
   statValue: {
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 19,
+    fontWeight: '800',
     color: COLORS.navy,
+    marginTop: 8,
   },
 
   statLabel: {
     fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.navy,
-    marginTop: 5,
-    textAlign: 'center',
+    color: COLORS.muted,
+    marginTop: 4,
   },
 
   statUnit: {
     fontSize: 10,
     color: COLORS.muted,
-    marginTop: 2,
   },
+
+  // SECTIONS
 
   sectionHeader: {
-    marginTop: 27,
-    marginBottom: 12,
-  },
-
-  sectionTitleRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 9,
+    marginBottom: 12,
   },
 
   sectionTitle: {
     fontSize: 18,
     fontWeight: '800',
     color: COLORS.navy,
-    letterSpacing: -0.4,
   },
 
-  upcomingCard: {
-    backgroundColor: 'rgba(255, 247, 222, 0.97)',
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: '#FFE09A',
+  sectionLink: {
+    fontSize: 13,
+    color: COLORS.blue,
+    fontWeight: '600',
+  },
+
+  // MAINTENANCE
+
+  maintenanceCard: {
+    backgroundColor: '#FFF6DC',
+    borderRadius: 16,
     padding: 15,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    marginBottom: 28,
+    borderWidth: 1,
+    borderColor: '#FFE4A2',
   },
 
-  upcomingIcon: {
-    width: 51,
-    height: 51,
-    borderRadius: 17,
+  maintenanceIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: COLORS.yellow,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 13,
   },
 
-  upcomingInfo: {
+  maintenanceInfo: {
     flex: 1,
   },
 
-  upcomingEyebrow: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#A67A13',
-    letterSpacing: 1.2,
-    marginBottom: 5,
-  },
-
-  upcomingTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.navy,
-  },
-
-  upcomingDescription: {
-    fontSize: 12,
-    color: '#516D87',
-    marginTop: 5,
-  },
-
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: 7,
-  },
-
-  upcomingStatus: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-
-  overdueText: {
-    color: COLORS.red,
-  },
-
-  dueSoonText: {
-    color: '#A57900',
-  },
-
-  upcomingText: {
-    color: COLORS.green,
-  },
-
-  overviewCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderRadius: 21,
-    padding: 17,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  overviewRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  overviewItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-
-  overviewIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-
-  overviewValue: {
-    fontSize: 26,
-    fontWeight: '900',
-  },
-
-  overviewLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.muted,
-    marginTop: 4,
-  },
-
-  overviewDivider: {
-    width: 1,
-    height: 45,
-    backgroundColor: COLORS.border,
-  },
-
-  overviewFooter: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 17,
-    borderTopWidth: 1,
-    borderTopColor: '#EDF3F8',
-    paddingTop: 13,
-  },
-
-  overviewFooterText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.blue,
-    textAlign: 'center',
-  },
-
-  unconfiguredText: {
-    fontSize: 12,
-    color: '#A77815',
-    marginTop: 9,
-    textAlign: 'center',
-  },
-
-  addServiceButton: {
-    marginTop: 19,
-    height: 54,
-    borderRadius: 17,
-    backgroundColor: COLORS.yellow,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 9,
-    shadowColor: '#C89112',
-    shadowOpacity: 0.14,
-    shadowRadius: 9,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    elevation: 2,
-  },
-
-  addServiceButtonText: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: COLORS.navy,
-  },
-
-  recentSectionHeading: {
-    marginTop: 27,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-
-  seeAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 1,
-  },
-
-  seeAll: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: COLORS.blue,
-  },
-
-  recentList: {
-    gap: 9,
-  },
-
-  recentItem: {
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 73,
-  },
-
-  recentIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: '#EAF5FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 11,
-  },
-
-  recentDetails: {
-    flex: 1,
-    paddingRight: 7,
-  },
-
-  recentName: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: COLORS.navy,
-  },
-
-  recentMeta: {
-    fontSize: 11,
-    color: COLORS.muted,
-    marginTop: 5,
-  },
-
-  recentRight: {
-    alignItems: 'flex-end',
-    gap: 6,
-    maxWidth: 100,
-  },
-
-  recentCost: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: COLORS.navy,
-  },
-
-  messageCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  messageTitle: {
+  maintenanceTitle: {
     fontSize: 15,
     fontWeight: '800',
     color: COLORS.navy,
   },
 
-  messageDescription: {
-    fontSize: 13,
+  maintenanceSubtitle: {
+    fontSize: 12,
     color: COLORS.muted,
+    marginTop: 5,
+  },
+
+  maintenanceStatus: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.amber,
     marginTop: 6,
   },
 
-  errorCard: {
+  // SERVICES
+
+  serviceCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
-    marginTop: 12,
-    padding: 14,
-    backgroundColor: '#FFF1F1',
-    borderRadius: 12,
+    gap: 12,
+    marginBottom: 8,
   },
 
-  errorText: {
+  serviceIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E8F4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  serviceInfo: {
     flex: 1,
-    fontSize: 13,
-    color: '#B91C1C',
   },
 
-  bottomSpace: {
-    height: 28,
+  serviceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.navy,
   },
+
+  serviceSubtitle: {
+    fontSize: 12,
+    color: COLORS.muted,
+    marginTop: 5,
+  },
+
+  emptyServices: {
+    padding: 24,
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  emptyText: {
+    color: COLORS.muted,
+    fontSize: 13,
+  },
+
+  // ADD SERVICE
+
+  addServiceButton: {
+    marginTop: 20,
+    height: 54,
+    backgroundColor: COLORS.yellow,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+
+  addServiceText: {
+    color: COLORS.navy,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+
+  profileAvatar: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  borderWidth: 2,
+  borderColor: '#FFFFFF',
+},
+
+profileAvatarFallback: {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: '#FFFFFF',
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+
+profileInitials: {
+  fontSize: 16,
+  fontWeight: '800',
+  color: COLORS.navy,
+},
 });

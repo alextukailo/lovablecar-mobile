@@ -1,5 +1,7 @@
 
 import { useAuth } from '@/auth/AuthContext';
+import { ProfileMenuProvider } from '@/components/ProfileMenuContext';
+
 
 import {
     createTelegramLink,
@@ -418,6 +420,10 @@ export default function TabsLayout() {
 
   return (
     <>
+    <ProfileMenuProvider
+    openProfile={() => setProfileOpen(true)}
+  >
+    
       <Tabs
         screenOptions={{
           headerRight: () => (
@@ -454,7 +460,7 @@ export default function TabsLayout() {
           name="index"
           options={{
             ...tabOptions('Home', House),
-            headerShown: true,
+            headerShown: false,
           }}
         />
 
@@ -478,6 +484,7 @@ export default function TabsLayout() {
           options={tabOptions('Settings', Settings2)}
         />
       </Tabs>
+  </ProfileMenuProvider>
 
       <Modal
         visible={profileOpen}
