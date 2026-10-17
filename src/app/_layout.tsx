@@ -107,6 +107,7 @@ export default function RootLayout() {
               name="car/[id]"
               options={{
                 title: 'Car',
+                 headerShown: false,
               }}
             />
 

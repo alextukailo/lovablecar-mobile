@@ -54,7 +54,13 @@ export default function NewCarScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/cars');
+    }
+  }}>
           <Text style={styles.cancelText}>Cancel</Text>
         </Pressable>
       </View>

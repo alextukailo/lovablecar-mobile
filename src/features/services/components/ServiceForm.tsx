@@ -57,7 +57,6 @@ export default function ServiceForm({
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.header}>
-        <Text style={styles.title}>{submitLabel}</Text>
         <Text style={styles.subtitle}>
           Enter the details of your vehicle service
         </Text>
@@ -249,7 +248,6 @@ export default function ServiceForm({
 
 const styles = StyleSheet.create({
   content: {
-    padding: 20,
     paddingBottom: 40,
   },
   header: {

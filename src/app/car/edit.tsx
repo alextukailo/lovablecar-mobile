@@ -92,7 +92,13 @@ export default function EditCarScreen() {
           </Text>
         </Pressable>
 
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/cars');
+    }
+  }}>
           <Text style={styles.cancelText}>
             Go back
           </Text>
@@ -108,7 +114,13 @@ export default function EditCarScreen() {
           Car not found
         </Text>
 
-        <Pressable onPress={() => router.back()}>
+        <Pressable onPress={() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/cars');
+    }
+  }}>
           <Text style={styles.cancelText}>
             Go back
           </Text>
@@ -124,7 +136,13 @@ export default function EditCarScreen() {
     >
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/cars');
+    }
+  }}
           disabled={updateCar.isPending}
         >
           <Text style={styles.cancelText}>

@@ -1,4 +1,3 @@
-
 {
   "expo": {
     "name": "LovableCar",
@@ -9,8 +8,11 @@
     "scheme": "lovablecarmobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/lovablecarlogo.png",
-      "bundleIdentifier": "com.alextukaylo.lovable-car-mobile"
+      "icon": "./assets/images/lovablecarlogo.png",
+      "bundleIdentifier": "com.alextukaylo.lovable-car-mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -56,6 +58,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "df2f90b0-0823-400c-a12a-55648e5bbf65"
+      }
     }
   }
 }

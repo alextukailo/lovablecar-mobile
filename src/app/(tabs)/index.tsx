@@ -1,4 +1,3 @@
-
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
@@ -121,10 +120,6 @@ export default function HomeScreen() {
 
   const openTelegramSettings = () => {
     closeProfile();
-
-    // Telegram settings are accessible through More.
-    // Change this route if your project has a
-    // dedicated notifications screen.
     router.push('/(tabs)/more');
   };
 
@@ -875,7 +870,7 @@ const styles = StyleSheet.create({
   },
 
   content: {
-    paddingTop: 105,
+    paddingTop: 155,
     paddingHorizontal: 16,
     paddingBottom: 40,
   },
@@ -884,11 +879,12 @@ const styles = StyleSheet.create({
 
   animatedHeader: {
     position: 'absolute',
-    top: 0,
+    top: 20,
     left: 0,
     right: 0,
-    height: 70,
+    height: 90,
     paddingHorizontal: 20,
+    paddingBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1170,7 +1166,7 @@ const styles = StyleSheet.create({
 
   sectionLink: {
     fontSize: 13,
-    color: COLORS.blue,
+    color: '#000000',
     fontWeight: '600',
   },
 
