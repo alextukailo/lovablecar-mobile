@@ -1,4 +1,7 @@
 
+import { Redirect, Tabs, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+
 import { useAuth } from '@/auth/AuthContext';
 import { ProfileMenuProvider } from '@/components/ProfileMenuContext';
 
@@ -10,8 +13,6 @@ import {
     setTelegramNotifications,
     type TelegramLinkStatus,
 } from '@/telegram/telegramLink';
-
-import { Redirect, Tabs, useRouter } from 'expo-router';
 
 import {
     Bell,
@@ -131,6 +132,7 @@ function TabIcon({
 
 export default function TabsLayout() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { user, loading, logout } = useAuth();
 
   const [profileOpen, setProfileOpen] = useState(false);
@@ -456,46 +458,54 @@ export default function TabsLayout() {
           tabBarHideOnKeyboard: true,
         }}
       >
-        <Tabs.Screen
-          name="index"
-          options={{
-            ...tabOptions('Home', House),
-            headerShown: false,
-          }}
-        />
+        
+      <Tabs.Screen
+        name="index"
+        options={{
+          ...tabOptions(t('navigation.home'), House),
+          headerShown: false,
+        }}
+      />
 
-        <Tabs.Screen
-          name="cars"
-          options={tabOptions('Cars', CarFront)}
-        />
+      <Tabs.Screen
+        name="cars"
+        options={tabOptions(
+          t('navigation.cars'),
+          CarFront,
+        )}
+      />
 
-        <Tabs.Screen
-          name="services"
-          options={tabOptions('Service', Wrench)}
-        />
+      <Tabs.Screen
+        name="services"
+        options={tabOptions(
+          t('navigation.services'),
+          Wrench,
+        )}
+      />
 
-        <Tabs.Screen
-          name="more"
-          options={{
-            ...tabOptions('More', Ellipsis),
-            headerShown: false,
-          }}
-        />
+      <Tabs.Screen
+        name="more"
+        options={{
+          ...tabOptions(t('navigation.more'), Ellipsis),
+          headerShown: false,
+        }}
+      />
 
-        <Tabs.Screen
-          name="reminders"
-          options={{
-            href: null,
-          }}
-        />
+      <Tabs.Screen
+        name="reminders"
+        options={{
+          href: null,
+        }}
+      />
 
-        <Tabs.Screen
-          name="settings"
-          options={{
-            href: null,
-          }}
-        />
-      </Tabs>
+      <Tabs.Screen
+        name="settings"
+        options={{
+          href: null,
+        }}
+      />
+
+    </Tabs>
   </ProfileMenuProvider>
 
       <Modal

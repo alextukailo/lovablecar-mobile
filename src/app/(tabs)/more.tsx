@@ -1,15 +1,22 @@
 
 import { router, Stack } from 'expo-router';
 import {
+    Check,
     ChevronRight,
     CircleHelp,
+    Globe2,
     Send,
     Settings,
     UserRound,
     X,
 } from 'lucide-react-native';
+
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
 import {
+    ActivityIndicator,
+    Alert,
     ImageBackground,
     Modal,
     Pressable,
@@ -18,9 +25,16 @@ import {
     Text,
     View,
 } from 'react-native';
+
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useProfileMenu } from '@/components/ProfileMenuContext';
+
+import {
+    getAppLanguage,
+    setAppLanguage,
+    type AppLanguage,
+} from '@/i18n';
 
 const COLORS = {
   navy: '#102C4B',
@@ -29,6 +43,7 @@ const COLORS = {
   white: '#FFFFFF',
   divider: '#EAF0F6',
   blue: '#1789E8',
+  yellow: '#FFD23F',
 };
 
 type InfoPanel = 'settings' | 'help' | null;
@@ -83,14 +98,117 @@ function MenuItem({
   );
 }
 
+type LanguageOptionProps = {
+  language: AppLanguage;
+  title: string;
+  subtitle: string;
+  selected: boolean;
+  disabled: boolean;
+  onPress: () => void;
+};
+
+function LanguageOption({
+  language,
+  title,
+  subtitle,
+  selected,
+  disabled,
+  onPress,
+}: LanguageOptionProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="radio"
+      accessibilityState={{
+        selected,
+        disabled,
+      }}
+      style={({ pressed }) => [
+        styles.languageOption,
+        selected && styles.languageOptionSelected,
+        pressed && styles.languageOptionPressed,
+      ]}
+    >
+      <View style={styles.flagContainer}>
+        <Text style={styles.flag}>
+          {language === 'en' ? '🇬🇧' : '🇷🇺'}
+        </Text>
+      </View>
+
+      <View style={styles.languageTextContainer}>
+        <Text style={styles.languageTitle}>
+          {title}
+        </Text>
+
+        <Text style={styles.languageSubtitle}>
+          {subtitle}
+        </Text>
+      </View>
+
+      <View
+        style={[
+          styles.radioCircle,
+          selected && styles.radioCircleSelected,
+        ]}
+      >
+        {selected && (
+          <Check
+            size={14}
+            strokeWidth={3}
+            color={COLORS.white}
+          />
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const { openProfile } = useProfileMenu();
+  const { t, i18n } = useTranslation();
 
-  const [panel, setPanel] =
-    useState<InfoPanel>(null);
+  const [panel, setPanel] = useState<InfoPanel>(null);
+  const [savingLanguage, setSavingLanguage] =
+    useState(false);
 
-  const closePanel = () => setPanel(null);
+  const currentLanguage = getAppLanguage();
+
+  const closePanel = () => {
+    if (!savingLanguage) {
+      setPanel(null);
+    }
+  };
+
+  const handleLanguageChange = async (
+    language: AppLanguage,
+  ) => {
+    if (
+      savingLanguage ||
+      language === getAppLanguage()
+    ) {
+      return;
+    }
+
+    setSavingLanguage(true);
+
+    try {
+      await setAppLanguage(language);
+    } catch (error) {
+      console.error(
+        '[Settings] Language change failed:',
+        error,
+      );
+
+      Alert.alert(
+        'Language',
+        'Could not save your language preference. Please try again.',
+      );
+    } finally {
+      setSavingLanguage(false);
+    }
+  };
 
   return (
     <View style={styles.screen}>
@@ -118,36 +236,32 @@ export default function MoreScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.title}>
-            More
+            {t('more.title')}
           </Text>
 
           <View style={styles.menuCard}>
             <MenuItem
-              title="Profile"
+              title={t('more.profile')}
               icon={UserRound}
               onPress={() => router.push('/profile')}
             />
 
             <MenuItem
-              title="Settings"
+              title={t('more.settings')}
               icon={Settings}
-              onPress={() =>
-                setPanel('settings')
-              }
+              onPress={() => setPanel('settings')}
             />
 
             <MenuItem
-              title="Telegram Notifications"
+              title={t('more.telegramNotifications')}
               icon={Send}
               onPress={openProfile}
             />
 
             <MenuItem
-              title="Help & Support"
+              title={t('more.helpSupport')}
               icon={CircleHelp}
-              onPress={() =>
-                setPanel('help')
-              }
+              onPress={() => setPanel('help')}
               last
             />
           </View>
@@ -164,19 +278,18 @@ export default function MoreScreen() {
           <Pressable
             style={StyleSheet.absoluteFill}
             onPress={closePanel}
-            accessibilityLabel="Close dialog"
+            accessibilityLabel={t('common.close')}
+            disabled={savingLanguage}
           />
 
           <View style={styles.modalCard}>
             <Pressable
               style={styles.closeButton}
               onPress={closePanel}
-              accessibilityLabel="Close"
+              accessibilityLabel={t('common.close')}
+              disabled={savingLanguage}
             >
-              <X
-                size={20}
-                color={COLORS.navy}
-              />
+              <X size={20} color={COLORS.navy} />
             </Pressable>
 
             <View style={styles.modalIcon}>
@@ -195,22 +308,82 @@ export default function MoreScreen() {
 
             <Text style={styles.modalTitle}>
               {panel === 'settings'
-                ? 'Settings'
-                : 'Help & Support'}
+                ? t('settings.title')
+                : t('more.helpSupport')}
             </Text>
 
-            <Text style={styles.modalDescription}>
-              {panel === 'settings'
-                ? 'Additional application settings will be available here in a future update.'
-                : 'Help and support options will be available here in a future update.'}
-            </Text>
+            {panel === 'settings' ? (
+              <View style={styles.settingsContent}>
+                <Text style={styles.modalDescription}>
+                  {t('settings.languageDescription')}
+                </Text>
+
+                <View style={styles.sectionHeader}>
+                  <Globe2
+                    size={17}
+                    color={COLORS.blue}
+                  />
+
+                  <Text style={styles.sectionLabel}>
+                    {t('settings.appLanguage')}
+                  </Text>
+                </View>
+
+                <View
+                  style={styles.languageList}
+                  accessibilityRole="radiogroup"
+                >
+                  <LanguageOption
+                    language="en"
+                    title="English"
+                    subtitle={t('settings.english')}
+                    selected={currentLanguage === 'en'}
+                    disabled={savingLanguage}
+                    onPress={() =>
+                      handleLanguageChange('en')
+                    }
+                  />
+
+                  <LanguageOption
+                    language="ru"
+                    title="Русский"
+                    subtitle={t('settings.russian')}
+                    selected={currentLanguage === 'ru'}
+                    disabled={savingLanguage}
+                    onPress={() =>
+                      handleLanguageChange('ru')
+                    }
+                  />
+                </View>
+
+                {savingLanguage ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={COLORS.blue}
+                    style={styles.saveIndicator}
+                  />
+                ) : (
+                  <Text style={styles.settingsHint}>
+                    {t('settings.savedAutomatically')}
+                  </Text>
+                )}
+              </View>
+            ) : (
+              <Text style={styles.modalDescription}>
+                {t('more.helpDescription')}
+              </Text>
+            )}
 
             <Pressable
-              style={styles.modalButton}
+              style={[
+                styles.modalButton,
+                savingLanguage && styles.buttonDisabled,
+              ]}
               onPress={closePanel}
+              disabled={savingLanguage}
             >
               <Text style={styles.modalButtonText}>
-                Got it
+                {t('common.done')}
               </Text>
             </Pressable>
           </View>
@@ -301,7 +474,7 @@ const styles = StyleSheet.create({
 
   modalCard: {
     width: '100%',
-    maxWidth: 350,
+    maxWidth: 380,
     backgroundColor: COLORS.white,
     borderRadius: 24,
     padding: 24,
@@ -345,14 +518,119 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
+  settingsContent: {
+    width: '100%',
+  },
+
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 24,
+    marginBottom: 12,
+  },
+
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    color: COLORS.muted,
+  },
+
+  languageList: {
+    width: '100%',
+    gap: 10,
+  },
+
+  languageOption: {
+    minHeight: 72,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.divider,
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  languageOptionSelected: {
+    borderColor: COLORS.blue,
+    backgroundColor: '#F0F8FF',
+  },
+
+  languageOptionPressed: {
+    opacity: 0.8,
+  },
+
+  flagContainer: {
+    width: 46,
+    height: 46,
+    borderRadius: 13,
+    backgroundColor: '#F3F7FB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+
+  flag: {
+    fontSize: 25,
+  },
+
+  languageTextContainer: {
+    flex: 1,
+  },
+
+  languageTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.navy,
+  },
+
+  languageSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    color: COLORS.muted,
+  },
+
+  radioCircle: {
+    width: 23,
+    height: 23,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#B8CAD9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  radioCircleSelected: {
+    borderColor: COLORS.blue,
+    backgroundColor: COLORS.blue,
+  },
+
+  settingsHint: {
+    marginTop: 16,
+    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 18,
+    color: COLORS.muted,
+  },
+
+  saveIndicator: {
+    marginTop: 16,
+  },
+
   modalButton: {
     width: '100%',
     height: 49,
     borderRadius: 15,
-    backgroundColor: '#FFD23F',
+    backgroundColor: COLORS.yellow,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 23,
+  },
+
+  buttonDisabled: {
+    opacity: 0.6,
   },
 
   modalButtonText: {

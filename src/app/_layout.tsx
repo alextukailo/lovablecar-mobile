@@ -1,6 +1,7 @@
 
 import { AuthProvider } from '@/auth/AuthContext';
 import AppSplashScreen from '@/components/AppSplashScreen';
+import { restoreLanguage } from '@/i18n';
 
 import {
     QueryClient,
@@ -17,6 +18,7 @@ import {
 
 import {
     useCallback,
+    useEffect,
     useState,
 } from 'react';
 
@@ -39,8 +41,34 @@ export default function RootLayout() {
   const [nativeSplashHidden, setNativeSplashHidden] =
     useState(false);
 
+  const [languageReady, setLanguageReady] =
+    useState(false);
+
+  // Restore the saved language before showing the app.
+  useEffect(() => {
+    let mounted = true;
+
+    restoreLanguage()
+      .catch((error) => {
+        console.warn(
+          '[i18n] Language initialization failed:',
+          error,
+        );
+      })
+      .finally(() => {
+        if (mounted) {
+          setLanguageReady(true);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Hide native splash only after language initialization.
   const handleLayout = useCallback(() => {
-    if (nativeSplashHidden) {
+    if (nativeSplashHidden || !languageReady) {
       return;
     }
 
@@ -49,7 +77,19 @@ export default function RootLayout() {
     void SplashScreen.hideAsync().catch(() => {
       // Native splash may already be hidden.
     });
-  }, [nativeSplashHidden]);
+  }, [nativeSplashHidden, languageReady]);
+
+  // Handle the case where layout finishes before
+  // the saved language has been restored.
+  useEffect(() => {
+    if (languageReady && !nativeSplashHidden) {
+      handleLayout();
+    }
+  }, [
+    languageReady,
+    nativeSplashHidden,
+    handleLayout,
+  ]);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -139,7 +179,7 @@ export default function RootLayout() {
             />
           </Stack>
 
-          {!nativeSplashHidden && (
+          {(!nativeSplashHidden || !languageReady) && (
             <View
               pointerEvents="none"
               style={styles.splashOverlay}

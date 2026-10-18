@@ -2,6 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../../auth/AuthContext';
@@ -96,6 +97,7 @@ async function fetchCarServices(
 // -----------------------------------
 
 export default function HomeScreen() {
+  const { t } = useTranslation();
   // -----------------------------------
   // SAFE AREA
   // -----------------------------------
@@ -141,7 +143,7 @@ export default function HomeScreen() {
       .filter(Boolean)
       .join(' ') ||
     user?.username ||
-    'My Profile';
+    t('profile.title');
 
   // -----------------------------------
   // PROFILE MENU
@@ -338,28 +340,28 @@ export default function HomeScreen() {
   // -----------------------------------
 
   const nextServiceTitle = !selectedCar
-    ? 'No car selected'
+    ? t('home.noCar')
     : isLoadingMaintenance
-      ? 'Loading maintenance...'
+      ? t('home.loadingMaintenance')
       : isMaintenanceError
-        ? 'Maintenance unavailable'
+        ? t('home.maintenanceUnavailable')
         : nextMaintenance
           ? getMaintenanceName(
               nextMaintenance.schedule,
             )
-          : 'Not configured yet';
+          : t('home.notConfigured');
 
   const nextServiceDescription = !selectedCar
-    ? 'Select a car to get started'
+    ? t('home.selectCar')
     : isLoadingMaintenance
-      ? 'Checking your schedules'
+      ? t('home.checkingSchedules')
       : isMaintenanceError
-        ? 'Could not check maintenance'
+        ? t('home.maintenanceError')
         : nextMaintenance
           ? formatMaintenanceDeadline(
               nextMaintenance.result,
             )
-          : 'Set up a maintenance schedule';
+          : t('home.setupMaintenance');
 
   const nextServiceStatus =
     nextMaintenance?.result.label ?? null;
@@ -422,10 +424,10 @@ export default function HomeScreen() {
             <View style={styles.vehicleDetails}>
               <Text style={styles.vehicleName}>
                 {isLoadingCars
-                  ? 'Loading car...'
+                  ? t('home.loadingCar')
                   : selectedCar
                     ? `${selectedCar.make} ${selectedCar.model}`
-                    : 'No car selected'}
+                    : t('home.noCar')}
               </Text>
 
               <Text style={styles.vehicleSubtitle}>
@@ -435,7 +437,7 @@ export default function HomeScreen() {
                         ? ` · ${selectedCar.engine}`
                         : ''
                     }`
-                  : 'Tap to manage your cars'}
+                  : t('home.tapManage')}
               </Text>
             </View>
 
@@ -464,13 +466,13 @@ export default function HomeScreen() {
               />
 
               <Text style={styles.vehicleFooterText}>
-                Vehicle overview
+                {t('home.vehicleOverview')}
               </Text>
             </View>
 
             <View style={styles.vehicleFooterRight}>
               <Text style={styles.vehicleFooterLink}>
-                View details
+                {t('home.viewDetails')}
               </Text>
 
               <ChevronRight
@@ -496,8 +498,8 @@ export default function HomeScreen() {
             />
 
             <Text style={styles.errorText}>
-              Could not load cars. Tap to retry.
-            </Text>
+                {t('home.carsError')}
+              </Text>
           </Pressable>
         )}
 
@@ -526,8 +528,8 @@ export default function HomeScreen() {
             </Text>
 
             <Text style={styles.statLabel}>
-              Mileage
-            </Text>
+                {t('cars.mileage')}
+              </Text>
 
             <Text style={styles.statUnit}>
               km
@@ -552,8 +554,8 @@ export default function HomeScreen() {
             </Text>
 
             <Text style={styles.statLabel}>
-              Services
-            </Text>
+                {t('navigation.services')}
+              </Text>
           </Pressable>
 
           <Pressable
@@ -572,8 +574,8 @@ export default function HomeScreen() {
             </Text>
 
             <Text style={styles.statLabel}>
-              Attention
-            </Text>
+                {t('home.attention')}
+              </Text>
           </Pressable>
         </View>
 
@@ -581,13 +583,13 @@ export default function HomeScreen() {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
-            Upcoming Service
-          </Text>
+                {t('home.upcomingService')}
+              </Text>
 
           <Pressable onPress={openSelectedCar}>
             <Text style={styles.sectionLink}>
-              See all
-            </Text>
+                {t('home.seeAll')}
+              </Text>
           </Pressable>
         </View>
 
@@ -628,8 +630,8 @@ export default function HomeScreen() {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
-            Recent Services
-          </Text>
+                {t('home.recentServices')}
+              </Text>
 
           <Pressable
             onPress={() =>
@@ -637,8 +639,8 @@ export default function HomeScreen() {
             }
           >
             <Text style={styles.sectionLink}>
-              See all
-            </Text>
+                {t('home.seeAll')}
+              </Text>
           </Pressable>
         </View>
 
@@ -692,10 +694,10 @@ export default function HomeScreen() {
 
             <Text style={styles.emptyText}>
               {isLoadingServices
-                ? 'Loading services...'
+                ? t('home.loadingServices')
                 : isServicesError
-                  ? 'Services unavailable'
-                  : 'No service records yet'}
+                  ? t('home.servicesUnavailable')
+                  : t('home.noServices')}
             </Text>
 
             {isServicesError && (
@@ -705,8 +707,8 @@ export default function HomeScreen() {
                 }
               >
                 <Text style={styles.sectionLink}>
-                  Retry
-                </Text>
+                {t('common.retry')}
+              </Text>
               </Pressable>
             )}
           </View>
@@ -724,8 +726,8 @@ export default function HomeScreen() {
           />
 
           <Text style={styles.addServiceText}>
-            Add Service
-          </Text>
+                {t('services.addService')}
+              </Text>
         </Pressable>
       </Animated.ScrollView>
 
@@ -752,7 +754,7 @@ export default function HomeScreen() {
           onPress={openProfile}
           style={styles.headerAction}
           accessibilityRole="button"
-          accessibilityLabel="Open profile"
+          accessibilityLabel={t('home.openProfile')}
         >
           {showAvatar ? (
             <Image
@@ -863,7 +865,7 @@ export default function HomeScreen() {
               />
 
               <Text style={styles.popupItemText}>
-                My Profile
+                {t('profile.title')}
               </Text>
 
               <ChevronRight
@@ -884,7 +886,7 @@ export default function HomeScreen() {
               />
 
               <Text style={styles.popupItemText}>
-                Telegram Notifications
+                {t('more.telegramNotifications')}
               </Text>
 
               <ChevronRight
@@ -916,7 +918,7 @@ export default function HomeScreen() {
                   },
                 ]}
               >
-                Log Out
+                {t('profile.logout')}
               </Text>
             </Pressable>
           </Pressable>
@@ -1183,9 +1185,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // -----------------------------------
-  // ERROR
-  // -----------------------------------
 
   errorCard: {
     padding: 14,
@@ -1202,9 +1201,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  // -----------------------------------
-  // STATISTICS
-  // -----------------------------------
 
   statsRow: {
     flexDirection: 'row',
@@ -1258,9 +1254,6 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
   },
 
-  // -----------------------------------
-  // SECTIONS
-  // -----------------------------------
 
   sectionHeader: {
     flexDirection: 'row',
@@ -1281,9 +1274,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // -----------------------------------
-  // MAINTENANCE
-  // -----------------------------------
 
   maintenanceCard: {
     backgroundColor: '#FFF6DC',
@@ -1329,9 +1319,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 
-  // -----------------------------------
-  // SERVICES
-  // -----------------------------------
 
   serviceCard: {
     backgroundColor: COLORS.white,
@@ -1381,9 +1368,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  // -----------------------------------
-  // ADD SERVICE
-  // -----------------------------------
 
   addServiceButton: {
     marginTop: 20,
