@@ -1,6 +1,8 @@
+
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../../auth/AuthContext';
 import { useProfileMenu } from '../../components/ProfileMenuContext';
@@ -57,6 +59,12 @@ const COLORS = {
   green: '#218C83',
 };
 
+const HEADER_HEIGHT = 64;
+
+// -----------------------------------
+// TYPES
+// -----------------------------------
+
 interface ApiService {
   id: string;
   carId?: string;
@@ -69,6 +77,10 @@ interface ApiService {
   workshop?: string | null;
 }
 
+// -----------------------------------
+// API
+// -----------------------------------
+
 async function fetchCarServices(
   carId: string,
 ): Promise<ApiService[]> {
@@ -79,28 +91,50 @@ async function fetchCarServices(
   return response.data;
 }
 
+// -----------------------------------
+// HOME SCREEN
+// -----------------------------------
+
 export default function HomeScreen() {
+  // -----------------------------------
+  // SAFE AREA
+  // -----------------------------------
+
+  const insets = useSafeAreaInsets();
+
+  const topInset = insets.top;
+  const totalHeaderHeight = topInset + HEADER_HEIGHT;
+
   // -----------------------------------
   // AUTHENTICATION
   // -----------------------------------
 
   const { user, logout } = useAuth();
-
   const { openProfile } = useProfileMenu();
 
+  // -----------------------------------
+  // TELEGRAM AVATAR
+  // -----------------------------------
+
+  const [avatarError, setAvatarError] = useState(false);
+
+  const photoUrl = user?.photoUrl || null;
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [photoUrl]);
+
+  const showAvatar = Boolean(
+    photoUrl && !avatarError,
+  );
+
   const initials = (
-    [
-      user?.firstName?.[0],
-      user?.lastName?.[0],
-    ]
+    [user?.firstName?.[0], user?.lastName?.[0]]
       .filter(Boolean)
       .join('') ||
     user?.username?.[0] ||
     'U'
   ).toUpperCase();
-
-  const [profileVisible, setProfileVisible] =
-    useState(false);
 
   const displayName =
     [user?.firstName, user?.lastName]
@@ -108,6 +142,13 @@ export default function HomeScreen() {
       .join(' ') ||
     user?.username ||
     'My Profile';
+
+  // -----------------------------------
+  // PROFILE MENU
+  // -----------------------------------
+
+  const [profileVisible, setProfileVisible] =
+    useState(false);
 
   const closeProfile = () => {
     setProfileVisible(false);
@@ -142,15 +183,14 @@ export default function HomeScreen() {
     new Animated.Value(0),
   ).current;
 
-  const headerBackgroundColor =
-    scrollY.interpolate({
-      inputRange: [0, 100],
-      outputRange: [
-        'rgba(255,204,50,0)',
-        'rgba(255,204,50,1)',
-      ],
-      extrapolate: 'clamp',
-    });
+  const headerBackgroundColor = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [
+      'rgba(255,204,50,0)',
+      'rgba(255,204,50,1)',
+    ],
+    extrapolate: 'clamp',
+  });
 
   // -----------------------------------
   // CARS
@@ -205,7 +245,6 @@ export default function HomeScreen() {
     data: maintenanceSchedules = [],
     isLoading: isLoadingMaintenance,
     isError: isMaintenanceError,
-    refetch: refetchMaintenance,
   } = useCarMaintenanceSchedules(
     selectedCarId ?? '',
   );
@@ -349,7 +388,12 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: totalHeaderHeight + 20,
+          },
+        ]}
       >
         {/* VEHICLE CARD */}
 
@@ -433,7 +477,9 @@ export default function HomeScreen() {
         {isCarsError && (
           <Pressable
             style={styles.errorCard}
-            onPress={() => void refetchCars()}
+            onPress={() =>
+              void refetchCars()
+            }
           >
             <AlertCircle
               size={17}
@@ -680,11 +726,16 @@ export default function HomeScreen() {
         style={[
           styles.animatedHeader,
           {
+            height: totalHeaderHeight,
+            paddingTop: topInset,
             backgroundColor: headerBackgroundColor,
           },
         ]}
       >
-        <Text style={styles.headerTitle}>
+        <Text
+          style={styles.headerTitle}
+          numberOfLines={1}
+        >
           LovableCar
         </Text>
 
@@ -694,10 +745,13 @@ export default function HomeScreen() {
           accessibilityRole="button"
           accessibilityLabel="Open profile"
         >
-          {user?.photoUrl ? (
+          {showAvatar ? (
             <Image
-              source={{ uri: user.photoUrl }}
+              source={{ uri: photoUrl! }}
               style={styles.profileAvatar}
+              onError={() => {
+                setAvatarError(true);
+              }}
             />
           ) : (
             <View style={styles.profileAvatarFallback}>
@@ -719,7 +773,13 @@ export default function HomeScreen() {
         onRequestClose={closeProfile}
       >
         <Pressable
-          style={styles.modalOverlay}
+          style={[
+            styles.modalOverlay,
+            {
+              paddingTop:
+                topInset + HEADER_HEIGHT + 8,
+            },
+          ]}
           onPress={closeProfile}
         >
           <Pressable
@@ -732,21 +792,21 @@ export default function HomeScreen() {
 
             <View style={styles.popupHeader}>
               <View style={styles.popupUserRow}>
-                {user?.photoUrl ? (
+                {showAvatar ? (
                   <Image
-                    source={{
-                      uri: user.photoUrl,
-                    }}
+                    source={{ uri: photoUrl! }}
                     style={styles.popupAvatar}
+                    onError={() => {
+                      setAvatarError(true);
+                    }}
                   />
                 ) : (
                   <View
                     style={styles.popupAvatarFallback}
                   >
-                    <UserRound
-                      size={26}
-                      color={COLORS.navy}
-                    />
+                    <Text style={styles.popupInitials}>
+                      {initials}
+                    </Text>
                   </View>
                 )}
 
@@ -865,26 +925,24 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.sky,
-    height: '100%',
     width: '100%',
   },
 
   content: {
-    paddingTop: 155,
     paddingHorizontal: 16,
     paddingBottom: 40,
   },
 
+  // -----------------------------------
   // ANIMATED HEADER
+  // -----------------------------------
 
   animatedHeader: {
     position: 'absolute',
-    top: 20,
+    top: 0,
     left: 0,
     right: 0,
-    height: 90,
     paddingHorizontal: 20,
-    paddingBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -893,28 +951,57 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
+    flexShrink: 1,
     color: COLORS.navy,
     fontSize: 24,
     fontWeight: '800',
   },
 
   headerAction: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+
+  // -----------------------------------
+  // PROFILE AVATAR
+  // -----------------------------------
+
+  profileAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+
+  profileAvatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
+  profileInitials: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.navy,
+  },
 
+  // -----------------------------------
   // PROFILE MODAL
+  // -----------------------------------
 
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(9,39,71,0.25)',
     alignItems: 'flex-end',
     justifyContent: 'flex-start',
-    paddingTop: 90,
     paddingHorizontal: 16,
   },
 
@@ -964,6 +1051,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  popupInitials: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.navy,
+  },
+
   popupUserName: {
     fontSize: 16,
     fontWeight: '800',
@@ -1001,7 +1094,9 @@ const styles = StyleSheet.create({
     color: COLORS.navy,
   },
 
+  // -----------------------------------
   // VEHICLE CARD
+  // -----------------------------------
 
   vehicleCard: {
     backgroundColor: COLORS.white,
@@ -1079,7 +1174,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
+  // -----------------------------------
   // ERROR
+  // -----------------------------------
 
   errorCard: {
     padding: 14,
@@ -1096,7 +1193,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  // -----------------------------------
   // STATISTICS
+  // -----------------------------------
 
   statsRow: {
     flexDirection: 'row',
@@ -1106,6 +1205,7 @@ const styles = StyleSheet.create({
 
   statCard: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: COLORS.white,
     borderRadius: 16,
     padding: 12,
@@ -1149,7 +1249,9 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
   },
 
+  // -----------------------------------
   // SECTIONS
+  // -----------------------------------
 
   sectionHeader: {
     flexDirection: 'row',
@@ -1170,7 +1272,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
+  // -----------------------------------
   // MAINTENANCE
+  // -----------------------------------
 
   maintenanceCard: {
     backgroundColor: '#FFF6DC',
@@ -1216,7 +1320,9 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 
+  // -----------------------------------
   // SERVICES
+  // -----------------------------------
 
   serviceCard: {
     backgroundColor: COLORS.white,
@@ -1266,7 +1372,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  // -----------------------------------
   // ADD SERVICE
+  // -----------------------------------
 
   addServiceButton: {
     marginTop: 20,
@@ -1284,27 +1392,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
-
-  profileAvatar: {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
-  borderWidth: 2,
-  borderColor: '#FFFFFF',
-},
-
-profileAvatarFallback: {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
-  backgroundColor: '#FFFFFF',
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-
-profileInitials: {
-  fontSize: 16,
-  fontWeight: '800',
-  color: COLORS.navy,
-},
 });
