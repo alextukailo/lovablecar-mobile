@@ -1,4 +1,8 @@
 
+import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { Platform } from 'react-native';
+
 export interface OcrResult {
   text: string;
 }
@@ -15,25 +19,21 @@ interface OcrSpaceResponse {
 }
 
 const OCR_SPACE_ENDPOINT =
-  process.env.EXPO_PUBLIC_OCR_SPACE_ENDPOINT as string;
+  process.env.EXPO_PUBLIC_OCR_SPACE_ENDPOINT;
 
 const OCR_SPACE_API_KEY =
-  process.env.EXPO_PUBLIC_OCR_SPACE_API_KEY as string;
+  process.env.EXPO_PUBLIC_OCR_SPACE_API_KEY;
 
 const OCR_BUSY_MESSAGE =
   'The OCR service is temporarily busy. ' +
-  'Please wait a few minutes and try again. ' +
-  'Your document has not been saved or changed.';
+  'Please wait a few minutes and try again.';
 
-function getMimeType(uri: string): string {
-  const cleanUri = uri.split('?')[0].toLowerCase();
+const MAX_IMAGE_WIDTH = 1600;
+const JPEG_COMPRESSION = 0.75;
 
-  if (cleanUri.endsWith('.png')) return 'image/png';
-  if (cleanUri.endsWith('.webp')) return 'image/webp';
-  if (cleanUri.endsWith('.heic')) return 'image/heic';
-
-  return 'image/jpeg';
-}
+// ------------------------------------
+// HELPERS
+// ------------------------------------
 
 function getErrorMessage(
   value: string | string[] | undefined,
@@ -55,13 +55,17 @@ function isOcrServiceBusy(
     status === 429 ||
     status === 503 ||
     normalized.includes('e571') ||
-    normalized.includes('free ocr api overloaded') ||
+    normalized.includes('overloaded') ||
     normalized.includes('throttled') ||
     normalized.includes('too many requests')
   );
 }
 
-async function imageUriToBase64(
+// ------------------------------------
+// WEB IMAGE CONVERSION
+// ------------------------------------
+
+async function webImageToBase64(
   uri: string,
 ): Promise<string> {
   const response = await fetch(uri);
@@ -91,9 +95,7 @@ async function imageUriToBase64(
 
       if (separatorIndex === -1) {
         reject(
-          new Error(
-            'The image could not be encoded as Base64.',
-          ),
+          new Error('Invalid Base64 image data.'),
         );
         return;
       }
@@ -101,14 +103,114 @@ async function imageUriToBase64(
       resolve(result.slice(separatorIndex + 1));
     };
 
-    reader.onerror = () =>
+    reader.onerror = () => {
       reject(
         new Error('Could not read the image.'),
       );
+    };
 
     reader.readAsDataURL(blob);
   });
 }
+
+// ------------------------------------
+// NATIVE IMAGE PREPARATION
+// ------------------------------------
+
+async function prepareNativeImage(
+  uri: string,
+): Promise<string> {
+  try {
+    // Convert HEIC/PNG/etc. into a standard JPEG.
+    // Resize large photos to reduce OCR upload size.
+    const image = await ImageManipulator.manipulateAsync(
+      uri,
+      [
+        {
+          resize: {
+            width: MAX_IMAGE_WIDTH,
+          },
+        },
+      ],
+      {
+        compress: JPEG_COMPRESSION,
+        format: ImageManipulator.SaveFormat.JPEG,
+      },
+    );
+
+    return image.uri;
+  } catch (error) {
+    console.error(
+      '[OCR] Image preparation failed:',
+      error,
+    );
+
+    throw new Error(
+      'Could not prepare the document image. ' +
+      'Please take another photo and try again.',
+    );
+  }
+}
+
+async function nativeImageToBase64(
+  uri: string,
+): Promise<string> {
+  try {
+    return await FileSystem.readAsStringAsync(
+      uri,
+      {
+        encoding: FileSystem.EncodingType.Base64,
+      },
+    );
+  } catch (error) {
+    console.error(
+      '[OCR] Base64 conversion failed:',
+      error,
+    );
+
+    throw new Error(
+      'Could not read the document image.',
+    );
+  }
+}
+
+// ------------------------------------
+// PREPARE OCR IMAGE
+// ------------------------------------
+
+async function prepareOcrImage(
+  imageUri: string,
+): Promise<string> {
+  if (Platform.OS === 'web') {
+    const base64 = await webImageToBase64(
+      imageUri,
+    );
+
+    const lowerUri = imageUri
+      .split('?')[0]
+      .toLowerCase();
+
+    const mimeType = lowerUri.endsWith('.png')
+      ? 'image/png'
+      : lowerUri.endsWith('.webp')
+        ? 'image/webp'
+        : 'image/jpeg';
+
+    return `data:${mimeType};base64,${base64}`;
+  }
+
+  const preparedUri =
+    await prepareNativeImage(imageUri);
+
+  const base64 =
+    await nativeImageToBase64(preparedUri);
+
+  return `data:image/jpeg;base64,${base64}`;
+}
+
+// ------------------------------------
+// OCR REQUEST
+// ------------------------------------
 
 export async function recognizeDocumentText(
   imageUri: string,
@@ -131,38 +233,48 @@ export async function recognizeDocumentText(
     );
   }
 
-  const base64 = await imageUriToBase64(imageUri);
-  const mimeType = getMimeType(imageUri);
+  const base64Image =
+    await prepareOcrImage(imageUri);
 
   const formData = new URLSearchParams({
     language: 'eng',
     OCREngine: '2',
     isOverlayRequired: 'false',
-    base64Image: `data:${mimeType};base64,${base64}`,
+    base64Image,
   });
 
   let response: Response;
 
   try {
-    response = await fetch(OCR_SPACE_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        apikey: OCR_SPACE_API_KEY,
-        'Content-Type':
-          'application/x-www-form-urlencoded',
+    response = await fetch(
+      OCR_SPACE_ENDPOINT,
+      {
+        method: 'POST',
+        headers: {
+          apikey: OCR_SPACE_API_KEY,
+          'Content-Type':
+            'application/x-www-form-urlencoded',
+        },
+        body: formData.toString(),
       },
-      body: formData.toString(),
-    });
-  } catch {
+    );
+  } catch (error) {
+    console.error(
+      '[OCR] Network error:',
+      error,
+    );
+
     throw new Error(
       'Could not connect to the OCR service. ' +
-      'Check your internet connection and try again.',
+      'Check your internet connection.',
     );
   }
 
-  // OCR.Space may return either JSON or plain text,
-  // including for HTTP 503 and rate-limit errors.
-  let responseText: string;
+  // ------------------------------------
+  // PARSE RESPONSE
+  // ------------------------------------
+
+  let responseText = '';
 
   try {
     responseText = await response.text();
@@ -183,8 +295,7 @@ export async function recognizeDocumentText(
       responseText,
     ) as OcrSpaceResponse;
   } catch {
-    // Some OCR.Space failures return plain text
-    // or an HTML error page instead of JSON.
+    // OCR.Space may return plain text or HTML.
   }
 
   const providerMessage = [
@@ -200,8 +311,10 @@ export async function recognizeDocumentText(
   const errorText =
     providerMessage || responseText;
 
-  // Recognize provider overload before reporting
-  // a generic HTTP error.
+  // ------------------------------------
+  // HANDLE ERRORS
+  // ------------------------------------
+
   if (
     isOcrServiceBusy(
       response.status,
@@ -212,19 +325,32 @@ export async function recognizeDocumentText(
   }
 
   if (!response.ok) {
-    const statusMessage =
+    console.error(
+      '[OCR] HTTP error:',
+      response.status,
+      errorText.slice(0, 1000),
+    );
+
+    if (
       response.status === 401 ||
       response.status === 403
-        ? 'OCR authentication failed. Check your API key.'
-        : `OCR service returned HTTP ${response.status}.`;
+    ) {
+      throw new Error(
+        'OCR authentication failed. ' +
+        'Check your API key.',
+      );
+    }
 
-    throw new Error(statusMessage);
+    throw new Error(
+      providerMessage
+        ? `OCR error: ${providerMessage}`
+        : `OCR service returned HTTP ${response.status}.`,
+    );
   }
 
   if (!result) {
     throw new Error(
-      'The OCR service returned an invalid response. ' +
-      'Please try again later.',
+      'The OCR service returned an invalid response.',
     );
   }
 
@@ -234,6 +360,10 @@ export async function recognizeDocumentText(
       'The OCR service could not read this image.',
     );
   }
+
+  // ------------------------------------
+  // EXTRACT TEXT
+  // ------------------------------------
 
   const text = (result.ParsedResults ?? [])
     .map(

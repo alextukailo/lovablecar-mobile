@@ -24,7 +24,7 @@ import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
-const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 12000;
 
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({

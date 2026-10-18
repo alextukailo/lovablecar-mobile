@@ -1,19 +1,7 @@
 
-import { useQuery } from '@tanstack/react-query';
-import { router, useNavigation } from 'expo-router';
+import { router } from 'expo-router';
+
 import {
-    Bell,
-    CalendarDays,
-    CarFront,
-    ChevronRight,
-    Gauge,
-    Plus,
-    Wrench,
-} from 'lucide-react-native';
-import type { ReactNode } from 'react';
-import { useLayoutEffect } from 'react';
-import {
-    ActivityIndicator,
     ImageBackground,
     Pressable,
     ScrollView,
@@ -22,122 +10,178 @@ import {
     View,
 } from 'react-native';
 
-import { api } from '../../../lib/api';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import {
+    ArrowRight,
+    CalendarClock,
+    CarFront,
+    Check,
+    ChevronRight,
+    CircleAlert,
+    Gauge,
+    Plus,
+    ShieldCheck,
+} from 'lucide-react-native';
+
 import { useCarMaintenanceSchedules } from '../../../lib/maintenance.queries';
+
 import { useCars } from '../../features/cars/hooks/useCars';
+
+import { calculateMaintenanceOverview } from '../../features/maintenance/utils/maintenance-overview';
+
 import { useCarStore } from '../../store/car.store';
 
-const C = {
-  navy: '#0A2444',
-  blue: '#1878D5',
-  muted: '#5E7FA3',
-  yellow: '#FFCA24',
-  white: '#FFFFFF',
-  border: '#E4EDF5',
-  background: '#F5FAFF',
+// -----------------------------------
+// COLORS
+// -----------------------------------
+
+const COLORS = {
+  navy: '#092747',
+  blue: '#1476C8',
+  muted: '#5E7B99',
   sky: '#DDF2FF',
+  white: '#FFFFFF',
+  yellow: '#FFCC32',
+  border: '#E0EDF6',
+  green: '#218C83',
+  red: '#D75A4C',
+  amber: '#C58B16',
 };
 
-type Service = {
-  id: string;
-  title: string;
-  date: string;
+// -----------------------------------
+// MAINTENANCE SUMMARY
+// -----------------------------------
+
+type MaintenanceSummaryProps = {
+  carId: string;
   mileage: number;
-  cost?: string | number | null;
-  currency?: string | null;
 };
 
-const formatNumber = (value: number) =>
-  value.toLocaleString('en-US').replace(/,/g, ' ');
+function MaintenanceSummary({
+  carId,
+  mileage,
+}: MaintenanceSummaryProps) {
+  const {
+    data: schedules = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useCarMaintenanceSchedules(carId);
 
-const formatDate = (value: string) =>
-  new Date(value).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-
-function useServices(carId?: string) {
-  return useQuery({
-    queryKey: ['services', carId],
-    enabled: !!carId,
-    queryFn: async () => {
-      const { data } = await api.get<Service[]>(
-        `/cars/${carId}/services`
-      );
-      return data;
-    },
-  });
-}
-
-function StatCard({
-  icon,
-  value,
-  label,
-}: {
-  icon: ReactNode;
-  value: string;
-  label: string;
-}) {
-  return (
-    <View style={styles.statCard}>
-      <View style={styles.statHeading}>
-        {icon}
-        <Text style={styles.statValue}>{value}</Text>
+  if (isLoading) {
+    return (
+      <View style={styles.maintenanceRow}>
+        <CalendarClock
+          size={16}
+          color={COLORS.muted}
+        />
+        <Text style={styles.maintenanceMuted}>
+          Checking maintenance...
+        </Text>
       </View>
+    );
+  }
 
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function SectionHeader({
-  title,
-  onPress,
-}: {
-  title: string;
-  onPress: () => void;
-}) {
-  return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-
-      <Pressable onPress={onPress}>
-        <Text style={styles.seeAll}>See all</Text>
+  if (isError) {
+    return (
+      <Pressable
+        style={styles.maintenanceRow}
+        onPress={(event) => {
+          event.stopPropagation();
+          void refetch();
+        }}
+      >
+        <CircleAlert
+          size={16}
+          color={COLORS.red}
+        />
+        <Text style={styles.maintenanceError}>
+          Maintenance unavailable · Retry
+        </Text>
       </Pressable>
+    );
+  }
+
+  const overview = calculateMaintenanceOverview(
+    schedules,
+    mileage,
+  );
+
+  const { counts } = overview;
+
+  if (counts.overdue > 0) {
+    return (
+      <View style={styles.maintenanceRow}>
+        <CircleAlert
+          size={16}
+          color={COLORS.red}
+        />
+        <Text style={styles.maintenanceDanger}>
+          {counts.overdue} overdue maintenance
+          {counts.overdue === 1 ? ' item' : ' items'}
+        </Text>
+      </View>
+    );
+  }
+
+  if (counts.dueSoon > 0) {
+    return (
+      <View style={styles.maintenanceRow}>
+        <CalendarClock
+          size={16}
+          color={COLORS.amber}
+        />
+        <Text style={styles.maintenanceWarning}>
+          {counts.dueSoon} upcoming maintenance
+          {counts.dueSoon === 1 ? ' item' : ' items'}
+        </Text>
+      </View>
+    );
+  }
+
+  if (counts.configured > 0) {
+    return (
+      <View style={styles.maintenanceRow}>
+        <ShieldCheck
+          size={16}
+          color={COLORS.green}
+        />
+        <Text style={styles.maintenanceSuccess}>
+          Maintenance up to date
+        </Text>
+        {counts.unconfigured > 0 && (
+          <Text style={styles.maintenanceMuted}>
+            · {counts.unconfigured} not configured
+          </Text>
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.maintenanceRow}>
+      <CalendarClock
+        size={16}
+        color={COLORS.muted}
+      />
+      <Text style={styles.maintenanceMuted}>
+        Set up maintenance reminders
+      </Text>
+      <ChevronRight
+        size={15}
+        color={COLORS.muted}
+      />
     </View>
   );
 }
 
-function maintenanceName(type: string) {
-  const names: Record<string, string> = {
-    ENGINE_OIL: 'Oil change',
-    TRANSMISSION_OIL: 'Transmission oil',
-    BRAKE_FLUID: 'Brake fluid',
-    HALDEX_OIL: 'Haldex oil',
-    ENGINE_AIR_FILTER: 'Air filter replacement',
-    CABIN_FILTER: 'Cabin filter',
-    FUEL_FILTER: 'Fuel filter',
-    SPARK_PLUGS: 'Spark plugs',
-    COOLANT: 'Coolant replacement',
-    TIMING_BELT: 'Timing belt',
-  };
-
-  return (
-    names[type] ??
-    type.replace(/_/g, ' ').toLowerCase()
-  );
-}
+// -----------------------------------
+// CARS SCREEN
+// -----------------------------------
 
 export default function CarsScreen() {
-  const navigation = useNavigation();
-
-  // Hide the default Expo Router header.
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-    });
-  }, [navigation]);
+  const insets = useSafeAreaInsets();
 
   const {
     data: cars = [],
@@ -146,668 +190,772 @@ export default function CarsScreen() {
     refetch,
   } = useCars();
 
-  const selectedId = useCarStore(
-    (state) => state.selectedCarId
+  const storedSelectedCarId = useCarStore(
+    (state) => state.selectedCarId,
   );
 
-  const car =
-    cars.find((c) => c.id === selectedId) ??
-    cars.find((c) => c.isPrimary) ??
-    cars[0];
-
-  const { data: services = [] } = useServices(car?.id);
-
-  const { data: schedules = [] } =
-    useCarMaintenanceSchedules(car?.id);
-
-  const enabledSchedules = schedules.filter(
-    (schedule) => schedule.enabled
+  const selectCar = useCarStore(
+    (state) => state.selectCar,
   );
 
-  const upcoming = [...enabledSchedules].sort((a, b) => {
-    const kmA =
-      a.nextDueMileage == null
-        ? Infinity
-        : a.nextDueMileage - (car?.mileage ?? 0);
+  const selectedCarExists = cars.some(
+    (car) => car.id === storedSelectedCarId,
+  );
 
-    const kmB =
-      b.nextDueMileage == null
-        ? Infinity
-        : b.nextDueMileage - (car?.mileage ?? 0);
+  const selectedCarId = selectedCarExists
+    ? storedSelectedCarId
+    : cars.find((car) => car.isPrimary)?.id ??
+      cars[0]?.id ??
+      null;
 
-    return kmA - kmB;
-  })[0];
+  const handleSelectCar = (carId: string) => {
+    selectCar(carId);
 
-  const latest = [...services].sort(
-    (a, b) =>
-      new Date(b.date).getTime() -
-      new Date(a.date).getTime()
-  )[0];
+    router.push({
+      pathname: '/car/[id]',
+      params: {
+        id: carId,
+      },
+    });
+  };
 
-  const dueText = upcoming
-    ? upcoming.nextDueMileage != null
-      ? `in ${formatNumber(
-          Math.max(
-            0,
-            upcoming.nextDueMileage - (car?.mileage ?? 0)
-          )
-        )} km`
-      : upcoming.nextDueDate
-        ? `by ${formatDate(upcoming.nextDueDate)}`
-        : 'Schedule configured'
-    : '';
-
-  if (isLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator
-          size="large"
-          color={C.blue}
-        />
-      </View>
-    );
-  }
-
-  if (isError) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>
-          Could not load your cars.
-        </Text>
-
-        <Pressable
-          style={styles.retryButton}
-          onPress={() => void refetch()}
-        >
-          <Text style={styles.retryText}>
-            Try again
-          </Text>
-        </Pressable>
-      </View>
-    );
-  }
+  const handleAddCar = () => {
+    router.push('/car/new');
+  };
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
+    <ImageBackground
+      source={require(
+        '../../../assets/images/lovablecar-main-background.png'
+      )}
+      style={styles.container}
+      resizeMode="cover"
+      blurRadius={7}
     >
-      {/* HERO BACKGROUND */}
-      <ImageBackground
-        source={require('../../../assets/images/cars-hero.png')}
-        style={styles.hero}
-        imageStyle={styles.heroImage}
-        resizeMode="cover"
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + 24,
+            paddingBottom: Math.max(
+              insets.bottom,
+              20,
+            ) + 24,
+          },
+        ]}
       >
         {/* HEADER */}
+
         <View style={styles.header}>
-          <Text style={styles.title}>My Cars</Text>
+          <View style={styles.headerInfo}>
+            <Text style={styles.title}>
+              My cars
+            </Text>
+
+            <Text style={styles.subtitle}>
+              Your garage, all in one place
+            </Text>
+          </View>
 
           <Pressable
-            style={styles.addButton}
-            onPress={() => router.push('/car/new')}
+            style={({ pressed }) => [
+              styles.addSmallButton,
+              pressed && styles.pressedButton,
+            ]}
+            onPress={handleAddCar}
+            accessibilityRole="button"
+            accessibilityLabel="Add car"
           >
             <Plus
-              size={25}
-              color={C.white}
-              strokeWidth={2}
+              size={26}
+              color={COLORS.navy}
+              strokeWidth={2.5}
             />
           </Pressable>
         </View>
 
-        {/* CAR SELECTOR */}
-        {car ? (
-          <Pressable
-            style={styles.carSelector}
-            onPress={() =>
-              router.push({
-                pathname: '/car/[id]',
-                params: { id: car.id },
-              })
-            }
-          >
-            <View style={styles.brandIcon}>
+        {/* GARAGE OVERVIEW */}
+
+        {!isLoading && !isError && cars.length > 0 && (
+          <View style={styles.garageSummary}>
+            <View style={styles.garageSummaryIcon}>
               <CarFront
-                size={27}
-                color={C.blue}
-                strokeWidth={2}
+                size={17}
+                color={COLORS.blue}
               />
             </View>
 
-            <View style={styles.carInfo}>
-              <Text
-                style={styles.carName}
-                numberOfLines={1}
-              >
-                {car.make} {car.model}
+            <Text style={styles.garageSummaryText}>
+              {cars.length}{' '}
+              {cars.length === 1 ? 'vehicle' : 'vehicles'}{' '}
+              in your garage
+            </Text>
+
+            <View style={styles.garageSummaryDot} />
+
+            <Text style={styles.garageSummaryRight}>
+              Overview
+            </Text>
+          </View>
+        )}
+
+        {/* LOADING */}
+
+        {isLoading && (
+          <Text style={styles.statusText}>
+            Loading cars...
+          </Text>
+        )}
+
+        {/* ERROR */}
+
+        {isError && (
+          <Pressable
+            style={styles.errorCard}
+            onPress={() => void refetch()}
+          >
+            <CircleAlert
+              size={18}
+              color={COLORS.red}
+            />
+            <Text style={styles.errorText}>
+              Could not load cars. Tap to retry.
+            </Text>
+          </Pressable>
+        )}
+
+        {/* EMPTY STATE */}
+
+        {!isLoading &&
+          !isError &&
+          cars.length === 0 && (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIcon}>
+                <CarFront
+                  size={34}
+                  color={COLORS.blue}
+                />
+              </View>
+
+              <Text style={styles.emptyTitle}>
+                Your garage is empty
               </Text>
 
-              <Text style={styles.carSubtitle}>
-                {car.year}
-                {car.engine
-                  ? ` · ${car.engine}`
-                  : ''}
+              <Text style={styles.emptyDescription}>
+                Add your first car to track mileage,
+                services, and maintenance.
+              </Text>
+
+              <Pressable
+                style={styles.emptyAddButton}
+                onPress={handleAddCar}
+              >
+                <Plus
+                  size={18}
+                  color={COLORS.navy}
+                />
+                <Text style={styles.emptyAddText}>
+                  Add your first car
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
+        {/* VEHICLE CARDS */}
+
+        {cars.map((car) => {
+          const isSelected =
+            car.id === selectedCarId;
+
+          return (
+            <Pressable
+              key={car.id}
+              style={({ pressed }) => [
+                styles.carCard,
+                isSelected && styles.selectedCarCard,
+                pressed && styles.pressedCard,
+              ]}
+              onPress={() =>
+                handleSelectCar(car.id)
+              }
+            >
+              {/* CARD HEADER */}
+
+              <View style={styles.cardTop}>
+                <View
+                  style={[
+                    styles.carIconContainer,
+                    isSelected &&
+                      styles.carIconSelected,
+                  ]}
+                >
+                  <CarFront
+                    size={30}
+                    color={COLORS.blue}
+                    strokeWidth={1.8}
+                  />
+                </View>
+
+                <View style={styles.cardTitleContainer}>
+                  <Text
+                    style={styles.carTitle}
+                    numberOfLines={2}
+                  >
+                    {car.make} {car.model}
+                  </Text>
+
+                  <Text style={styles.carSubtitle}>
+                    {car.year}
+                    {car.engine
+                      ? ` · ${car.engine}`
+                      : ''}
+                  </Text>
+                </View>
+
+                <ChevronRight
+                  size={22}
+                  color={COLORS.muted}
+                />
+              </View>
+
+              {/* SELECTED INDICATOR */}
+
+              {isSelected && (
+                <View style={styles.selectedRow}>
+                  <View style={styles.selectedIndicator}>
+                    <Check
+                      size={13}
+                      color={COLORS.green}
+                      strokeWidth={3}
+                    />
+                    <Text style={styles.selectedText}>
+                      Current vehicle
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* DIVIDER */}
+
+              <View style={styles.cardDivider} />
+
+              {/* MILEAGE */}
+
+              <View style={styles.mileageSection}>
+                <View style={styles.mileageIcon}>
+                  <Gauge
+                    size={19}
+                    color={COLORS.blue}
+                  />
+                </View>
+
+                <View style={styles.mileageInfo}>
+                  <Text style={styles.mileageLabel}>
+                    CURRENT MILEAGE
+                  </Text>
+
+                  <View style={styles.mileageValueRow}>
+                    <Text style={styles.mileageValue}>
+                      {car.mileage.toLocaleString()}
+                    </Text>
+
+                    <Text style={styles.mileageUnit}>
+                      km
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* MAINTENANCE STATUS */}
+
+              <View style={styles.maintenanceContainer}>
+                <MaintenanceSummary
+                  carId={car.id}
+                  mileage={car.mileage}
+                />
+              </View>
+
+              {/* CARD FOOTER */}
+
+              <View style={styles.cardFooter}>
+                <Text style={styles.cardFooterText}>
+                  Vehicle details
+                </Text>
+
+                <ArrowRight
+                  size={17}
+                  color={COLORS.blue}
+                  strokeWidth={2.2}
+                />
+              </View>
+            </Pressable>
+          );
+        })}
+
+        {/* ADD ANOTHER CAR */}
+
+        {cars.length > 0 && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.addCarButton,
+              pressed && styles.pressedButton,
+            ]}
+            onPress={handleAddCar}
+          >
+            <View style={styles.addCarIcon}>
+              <Plus
+                size={19}
+                color={COLORS.blue}
+                strokeWidth={2.4}
+              />
+            </View>
+
+            <View style={styles.addCarInfo}>
+              <Text style={styles.addCarTitle}>
+                Add another car
+              </Text>
+
+              <Text style={styles.addCarSubtitle}>
+                Expand your garage
               </Text>
             </View>
 
             <ChevronRight
-              size={21}
-              color={C.muted}
+              size={20}
+              color={COLORS.blue}
             />
           </Pressable>
-        ) : (
-          <View style={styles.emptyCar}>
-            <CarFront
-              size={40}
-              color={C.blue}
-            />
-
-            <Text style={styles.carName}>
-              No cars yet
-            </Text>
-
-            <Pressable
-              onPress={() => router.push('/car/new')}
-            >
-              <Text style={styles.emptyCarLink}>
-                Add your first car
-              </Text>
-            </Pressable>
-          </View>
         )}
-
-        {/* SPACE FOR THE CAR IN THE BACKGROUND IMAGE */}
-        <View style={styles.heroSpacer} />
-      </ImageBackground>
-
-      {/* MAIN CONTENT */}
-      {car && (
-        <>
-          {/* STATISTICS */}
-          <View style={styles.statsRow}>
-            <StatCard
-              icon={
-                <Gauge
-                  size={19}
-                  color={C.navy}
-                />
-              }
-              value={formatNumber(car.mileage)}
-              label="Mileage, km"
-            />
-
-            <StatCard
-              icon={
-                <CalendarDays
-                  size={19}
-                  color={C.navy}
-                />
-              }
-              value={String(services.length)}
-              label="Services"
-            />
-
-            <StatCard
-              icon={
-                <Bell
-                  size={19}
-                  color="#D69B00"
-                />
-              }
-              value={String(enabledSchedules.length)}
-              label="Scheduled"
-            />
-          </View>
-
-          {/* UPCOMING SERVICE */}
-          <SectionHeader
-            title="Upcoming Service"
-            onPress={() =>
-              router.push({
-                pathname: '/car/[id]',
-                params: { id: car.id },
-              })
-            }
-          />
-
-          {upcoming ? (
-            <Pressable
-              style={styles.upcomingCard}
-              onPress={() =>
-                router.push({
-                  pathname: '/maintenance/[id]',
-                  params: {
-                    id: upcoming.id,
-                    carId: car.id,
-                  },
-                })
-              }
-            >
-              <View style={styles.yellowIcon}>
-                <Wrench
-                  size={23}
-                  color={C.navy}
-                />
-              </View>
-
-              <View style={styles.cardContent}>
-                <Text style={styles.cardTitle}>
-                  {upcoming.customTitle ??
-                    maintenanceName(upcoming.type)}
-                </Text>
-
-                <Text style={styles.cardSubtitle}>
-                  {dueText}
-                </Text>
-              </View>
-
-              <ChevronRight
-                size={20}
-                color={C.muted}
-              />
-            </Pressable>
-          ) : (
-            <View style={styles.emptyCard}>
-              <Text style={styles.cardSubtitle}>
-                No upcoming maintenance configured
-              </Text>
-            </View>
-          )}
-
-          {/* RECENT SERVICES */}
-          <SectionHeader
-            title="Recent Services"
-            onPress={() =>
-              router.push('/(tabs)/services')
-            }
-          />
-
-          {latest ? (
-            <Pressable
-              style={styles.serviceCard}
-              onPress={() =>
-                router.push({
-                  pathname: '/service/[id]',
-                  params: { id: latest.id },
-                })
-              }
-            >
-              <View style={styles.serviceIcon}>
-                <Wrench
-                  size={21}
-                  color={C.blue}
-                />
-              </View>
-
-              <View style={styles.serviceInfo}>
-                <Text
-                  style={styles.serviceTitle}
-                  numberOfLines={1}
-                >
-                  {latest.title}
-                </Text>
-
-                <Text style={styles.serviceMeta}>
-                  {formatDate(latest.date)}
-                  {' · '}
-                  {formatNumber(latest.mileage)} km
-                </Text>
-              </View>
-
-              <Text style={styles.serviceCost}>
-                {latest.cost != null
-                  ? `${Number(latest.cost).toFixed(2)} ${
-                      latest.currency ?? 'PLN'
-                    }`
-                  : '—'}
-              </Text>
-            </Pressable>
-          ) : (
-            <View style={styles.emptyCard}>
-              <Text style={styles.cardSubtitle}>
-                No service records yet
-              </Text>
-            </View>
-          )}
-
-          {/* ADD SERVICE BUTTON */}
-          <Pressable
-            style={styles.newServiceButton}
-            onPress={() =>
-              router.push('/service/new')
-            }
-          >
-            <Plus
-              size={22}
-              color={C.navy}
-              strokeWidth={2.5}
-            />
-
-            <Text style={styles.newServiceText}>
-              Add Service
-            </Text>
-          </Pressable>
-        </>
-      )}
-    </ScrollView>
+      </ScrollView>
+    </ImageBackground>
   );
 }
 
+// -----------------------------------
+// STYLES
+// -----------------------------------
+
 const styles = StyleSheet.create({
-  screen: {
+  container: {
     flex: 1,
-    backgroundColor: C.background,
+    width: '100%',
+    backgroundColor: COLORS.sky,
+  },
+
+  scrollView: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
 
   content: {
-    paddingBottom: 36,
+    paddingHorizontal: 20,
   },
 
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: C.background,
-  },
-
-  errorText: {
-    color: C.navy,
-    fontSize: 15,
-  },
-
-  retryButton: {
-    marginTop: 15,
-    padding: 12,
-  },
-
-  retryText: {
-    color: C.blue,
-    fontWeight: '700',
-  },
-
-  // HERO
-
-  hero: {
-    paddingTop: 24,
-    paddingHorizontal: 16,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: C.sky,
-  },
-
-  heroImage: {
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    transform: 'translate(-470px, -371px) scale(0.4)',
-  },
-
-  heroSpacer: {
-    height: 215,
-  },
+  // HEADER
 
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 20,
   },
 
+  headerInfo: {
+    flex: 1,
+    paddingRight: 12,
+  },
+
   title: {
-    fontSize: 29,
+    fontSize: 30,
     fontWeight: '800',
-    color: C.navy,
-    letterSpacing: -0.8,
+    color: COLORS.navy,
+    letterSpacing: -0.7,
   },
 
-  addButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: C.navy,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 4,
-    shadowColor: C.navy,
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
-  },
-
-  // CAR SELECTOR
-
-  carSelector: {
-    minHeight: 76,
-    backgroundColor: C.white,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    zIndex: 2,
-  },
-
-  brandIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    borderWidth: 2,
-    borderColor: C.blue,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  carInfo: {
-    flex: 1,
-  },
-
-  carName: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: C.navy,
-  },
-
-  carSubtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    color: C.muted,
-  },
-
-  emptyCar: {
-    backgroundColor: C.white,
-    borderRadius: 18,
-    padding: 22,
-    alignItems: 'center',
-    gap: 10,
-  },
-
-  emptyCarLink: {
+  subtitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: C.blue,
-  },
-
-  // STATISTICS
-
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 7,
-    marginTop: 14,
-    marginBottom: 28,
-  },
-
-  statCard: {
-    flex: 1,
-    minHeight: 82,
-    backgroundColor: C.white,
-    borderRadius: 15,
-    paddingHorizontal: 6,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  statHeading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-
-  statValue: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: C.navy,
-  },
-
-  statLabel: {
-    marginTop: 7,
-    fontSize: 11,
-    color: C.muted,
-    textAlign: 'center',
-  },
-
-  // SECTIONS
-
-  sectionHeader: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: C.navy,
-    letterSpacing: -0.3,
-  },
-
-  seeAll: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: C.blue,
-  },
-
-  // UPCOMING SERVICE
-
-  upcomingCard: {
-    marginHorizontal: 16,
-    marginBottom: 28,
-    minHeight: 82,
-    padding: 13,
-    borderRadius: 16,
-    backgroundColor: '#FFF6DB',
-    borderWidth: 1,
-    borderColor: '#FFE5A0',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 13,
-  },
-
-  yellowIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: C.yellow,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  cardContent: {
-    flex: 1,
-  },
-
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: C.navy,
-  },
-
-  cardSubtitle: {
-    fontSize: 13,
-    color: C.muted,
+    color: COLORS.muted,
     marginTop: 5,
   },
 
-  emptyCard: {
-    marginHorizontal: 16,
-    marginBottom: 28,
-    padding: 20,
-    minHeight: 70,
-    backgroundColor: C.white,
-    borderRadius: 16,
+  addSmallButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: COLORS.yellow,
+    alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#C58B16',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
   },
 
-  // RECENT SERVICES
+  pressedButton: {
+    opacity: 0.75,
+  },
 
-  serviceCard: {
-    marginHorizontal: 16,
-    minHeight: 83,
-    borderRadius: 16,
-    padding: 13,
-    backgroundColor: C.white,
-    borderWidth: 1,
-    borderColor: C.border,
+  // GARAGE SUMMARY
+
+  garageSummary: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    marginBottom: 18,
+    gap: 8,
   },
 
-  serviceIcon: {
-    width: 34,
-    height: 40,
+  garageSummaryIcon: {
+    width: 27,
+    height: 27,
+    borderRadius: 9,
+    backgroundColor: 'rgba(255,255,255,0.75)',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  serviceInfo: {
+  garageSummaryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.navy,
+  },
+
+  garageSummaryDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.muted,
+  },
+
+  garageSummaryRight: {
+    fontSize: 12,
+    color: COLORS.muted,
+  },
+
+  // VEHICLE CARD
+
+  carCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.navy,
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+
+  selectedCarCard: {
+    borderColor: COLORS.yellow,
+    borderWidth: 2,
+  },
+
+  pressedCard: {
+    opacity: 0.85,
+  },
+
+  // CARD HEADER
+
+  cardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  carIconContainer: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: '#EAF5FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  carIconSelected: {
+    backgroundColor: '#E4F2FF',
+  },
+
+  cardTitleContainer: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  carTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.navy,
+    letterSpacing: -0.3,
+  },
+
+  carSubtitle: {
+    fontSize: 13,
+    color: COLORS.muted,
+    marginTop: 5,
+  },
+
+  // SELECTED
+
+  selectedRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+  },
+
+  selectedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#E7F6F0',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+
+  selectedText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.green,
+  },
+
+  // DIVIDER
+
+  cardDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 16,
+  },
+
+  // MILEAGE
+
+  mileageSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  mileageIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#EDF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  mileageInfo: {
     flex: 1,
   },
 
-  serviceTitle: {
-    fontSize: 14,
+  mileageLabel: {
+    fontSize: 10,
     fontWeight: '700',
-    color: C.navy,
+    letterSpacing: 1,
+    color: COLORS.muted,
   },
 
-  serviceMeta: {
-    marginTop: 6,
-    fontSize: 11,
-    color: C.muted,
+  mileageValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 5,
+    marginTop: 3,
   },
 
-  serviceCost: {
-    fontSize: 12,
+  mileageValue: {
+    fontSize: 25,
     fontWeight: '800',
-    color: C.navy,
+    color: COLORS.navy,
+    letterSpacing: -0.6,
   },
 
-  // ADD SERVICE
+  mileageUnit: {
+    fontSize: 13,
+    color: COLORS.muted,
+  },
 
-  newServiceButton: {
-    marginHorizontal: 16,
-    marginTop: 25,
-    height: 54,
-    borderRadius: 17,
-    backgroundColor: C.yellow,
+  // MAINTENANCE
+
+  maintenanceContainer: {
+    marginTop: 16,
+    backgroundColor: '#F5F9FC',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+
+  maintenanceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
+    flexWrap: 'wrap',
+    gap: 7,
   },
 
-  newServiceText: {
-    fontSize: 16,
+  maintenanceMuted: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.muted,
+  },
+
+  maintenanceDanger: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.red,
+  },
+
+  maintenanceWarning: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.amber,
+  },
+
+  maintenanceSuccess: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.green,
+  },
+
+  maintenanceError: {
+    fontSize: 12,
+    color: COLORS.red,
+  },
+
+  // CARD FOOTER
+
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 7,
+    marginTop: 17,
+  },
+
+  cardFooterText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.blue,
+  },
+
+  // ADD CAR
+
+  addCarButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#A8C9E2',
+    borderStyle: 'dashed',
+    gap: 12,
+    marginTop: 4,
+  },
+
+  addCarIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#E6F3FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  addCarInfo: {
+    flex: 1,
+  },
+
+  addCarTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.navy,
+  },
+
+  addCarSubtitle: {
+    fontSize: 12,
+    color: COLORS.muted,
+    marginTop: 4,
+  },
+
+  // EMPTY STATE
+
+  emptyCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    backgroundColor: '#EAF5FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+
+  emptyTitle: {
+    fontSize: 19,
     fontWeight: '800',
-    color: C.navy,
+    color: COLORS.navy,
+  },
+
+  emptyDescription: {
+    fontSize: 13,
+    color: COLORS.muted,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 8,
+  },
+
+  emptyAddButton: {
+    marginTop: 22,
+    backgroundColor: COLORS.yellow,
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  emptyAddText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.navy,
+  },
+
+  // ERRORS AND STATUS
+
+  statusText: {
+    fontSize: 14,
+    color: COLORS.muted,
+    marginBottom: 16,
+  },
+
+  errorCard: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 14,
+    padding: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+
+  errorText: {
+    fontSize: 13,
+    color: COLORS.red,
+    flex: 1,
   },
 });

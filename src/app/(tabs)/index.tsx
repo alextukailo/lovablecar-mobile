@@ -295,7 +295,12 @@ export default function HomeScreen() {
   };
 
   const openNextMaintenance = () => {
-    if (selectedCarId && nextMaintenance) {
+    if (!selectedCarId) {
+      router.push('/(tabs)/cars');
+      return;
+    }
+
+    if (nextMaintenance) {
       router.push({
         pathname: '/maintenance/[id]',
         params: {
@@ -303,11 +308,15 @@ export default function HomeScreen() {
           carId: selectedCarId,
         },
       });
-
       return;
     }
 
-    openSelectedCar();
+    router.push({
+      pathname: '/car/[id]',
+      params: {
+        id: selectedCarId,
+      },
+    });
   };
 
   const handleAddService = () => {

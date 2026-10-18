@@ -18,14 +18,14 @@ import {
     BellOff,
     CarFront,
     CheckCircle2,
+    Ellipsis,
     ExternalLink,
     House,
     LogOut,
     RefreshCw,
     Send,
-    Settings2,
     Unlink,
-    Wrench,
+    Wrench
 } from 'lucide-react-native';
 
 import type { ReactNode } from 'react';
@@ -475,13 +475,25 @@ export default function TabsLayout() {
         />
 
         <Tabs.Screen
+          name="more"
+          options={{
+            ...tabOptions('More', Ellipsis),
+            headerShown: false,
+          }}
+        />
+
+        <Tabs.Screen
           name="reminders"
-          options={tabOptions('Reminders', Bell)}
+          options={{
+            href: null,
+          }}
         />
 
         <Tabs.Screen
           name="settings"
-          options={tabOptions('Settings', Settings2)}
+          options={{
+            href: null,
+          }}
         />
       </Tabs>
   </ProfileMenuProvider>

@@ -5,9 +5,12 @@ import {
     useQueryClient,
 } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
+import { ArrowLeft, CarFront, Wrench } from 'lucide-react-native';
 import {
     ActivityIndicator,
     Alert,
+    KeyboardAvoidingView,
+    Platform,
     Pressable,
     StyleSheet,
     Text,
@@ -57,7 +60,6 @@ async function fetchService(
   const response = await api.get<ApiServiceRecord>(
     `/cars/${carId}/services/${serviceId}`,
   );
-
   return response.data;
 }
 
@@ -70,21 +72,13 @@ async function updateService(
     `/cars/${carId}/services/${serviceId}`,
     data,
   );
-
   return response.data;
 }
 
 function isSupportedCurrency(
   currency: string,
 ): currency is ServiceFormValues['currency'] {
-  return [
-    'BYN',
-    'USD',
-    'EUR',
-    'PLN',
-    'GBP',
-    'RUB',
-  ].includes(currency);
+  return ['BYN', 'USD', 'EUR', 'PLN', 'GBP', 'RUB'].includes(currency);
 }
 
 function getDefaultValues(
@@ -96,8 +90,7 @@ function getDefaultValues(
     mileage: String(service.mileage),
     serviceName: service.title,
     totalCost:
-      service.cost === null ||
-      service.cost === undefined
+      service.cost === null || service.cost === undefined
         ? '0'
         : String(service.cost),
     currency: isSupportedCurrency(service.currency)
@@ -115,7 +108,6 @@ export default function EditServiceScreen() {
 
   const serviceId = firstParam(params.id);
   const carId = firstParam(params.carId);
-
   const queryClient = useQueryClient();
 
   const {
@@ -125,14 +117,8 @@ export default function EditServiceScreen() {
     error: serviceErrorDetails,
     refetch: refetchService,
   } = useQuery({
-    queryKey: [
-      'cars',
-      carId,
-      'services',
-      serviceId,
-    ],
-    queryFn: () =>
-      fetchService(carId!, serviceId!),
+    queryKey: ['cars', carId, 'services', serviceId],
+    queryFn: () => fetchService(carId!, serviceId!),
     enabled: Boolean(carId && serviceId),
   });
 
@@ -146,78 +132,37 @@ export default function EditServiceScreen() {
   const updateMutation = useMutation({
     mutationFn: (data: UpdateServicePayload) => {
       if (!carId || !serviceId) {
-        throw new Error(
-          'Missing car or service ID',
-        );
+        throw new Error('Missing car or service ID');
       }
-
-      return updateService(
-        carId,
-        serviceId,
-        data,
-      );
+      return updateService(carId, serviceId, data);
     },
-
     onSuccess: async (updatedService) => {
       queryClient.setQueryData(
-        [
-          'cars',
-          carId,
-          'services',
-          serviceId,
-        ],
+        ['cars', carId, 'services', serviceId],
         updatedService,
       );
-
       await queryClient.invalidateQueries({
-        queryKey: [
-          'cars',
-          carId,
-          'services',
-        ],
+        queryKey: ['cars', carId, 'services'],
       });
     },
   });
 
-  const handleSubmit = async (
-    values: ServiceFormValues,
-  ) => {
-    if (
-      !service ||
-      !carId ||
-      !serviceId ||
-      updateMutation.isPending
-    ) {
+  const handleSubmit = async (values: ServiceFormValues) => {
+    if (!service || !carId || !serviceId || updateMutation.isPending) {
       return;
     }
 
     const mileage = Number(values.mileage);
-
-    const normalizedCost = values.totalCost
-      .trim()
-      .replace(',', '.');
-
+    const normalizedCost = values.totalCost.trim().replace(',', '.');
     const cost = Number(normalizedCost);
 
-    if (
-      !Number.isSafeInteger(mileage) ||
-      mileage < 0
-    ) {
-      Alert.alert(
-        'Invalid mileage',
-        'Please enter a valid mileage.',
-      );
+    if (!Number.isSafeInteger(mileage) || mileage < 0) {
+      Alert.alert('Invalid mileage', 'Please enter a valid mileage.');
       return;
     }
 
-    if (
-      !Number.isFinite(cost) ||
-      cost < 0
-    ) {
-      Alert.alert(
-        'Invalid cost',
-        'Please enter a valid service cost.',
-      );
+    if (!Number.isFinite(cost) || cost < 0) {
+      Alert.alert('Invalid cost', 'Please enter a valid service cost.');
       return;
     }
 
@@ -233,10 +178,7 @@ export default function EditServiceScreen() {
 
       router.replace({
         pathname: '/service/[id]',
-        params: {
-          id: serviceId,
-          carId,
-        },
+        params: { id: serviceId, carId },
       });
     } catch (error) {
       Alert.alert(
@@ -251,23 +193,18 @@ export default function EditServiceScreen() {
   if (!carId || !serviceId) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.title}>
+        <Wrench size={44} color="#1789E8" />
+        <Text style={styles.centerTitle}>
           Missing service information
         </Text>
-
-        <Text style={styles.description}>
-          Open the service record from
-          your car's service history.
+        <Text style={styles.centerDescription}>
+          Open the service record from your car's service history.
         </Text>
-
         <Pressable
-          onPress={() =>
-            router.replace('/(tabs)/cars')
-          }
+          style={styles.actionButton}
+          onPress={() => router.replace('/(tabs)/cars')}
         >
-          <Text style={styles.link}>
-            Back to cars
-          </Text>
+          <Text style={styles.actionText}>Back to Cars</Text>
         </Pressable>
       </View>
     );
@@ -276,70 +213,39 @@ export default function EditServiceScreen() {
   if (serviceLoading || carLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator
-          size="large"
-          color="#246BFD"
-        />
-
-        <Text style={styles.description}>
+        <ActivityIndicator size="large" color="#1789E8" />
+        <Text style={styles.centerDescription}>
           Loading service...
         </Text>
       </View>
     );
   }
 
-  if (serviceError || carError) {
+  if (serviceError || carError || !service || !car) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.title}>
-          Could not load service
+        <Wrench size={44} color="#1789E8" />
+        <Text style={styles.centerTitle}>
+          {serviceError || carError
+            ? 'Could not load service'
+            : 'Service not found'}
         </Text>
-
-        <Text style={styles.description}>
+        <Text style={styles.centerDescription}>
           {serviceErrorDetails instanceof Error
             ? serviceErrorDetails.message
-            : 'Please check your connection to the backend.'}
+            : 'This service record is unavailable.'}
         </Text>
-
-        <Pressable
-          onPress={() => {
-            void refetchService();
-            void refetchCar();
-          }}
-        >
-          <Text style={styles.link}>
-            Try again
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() =>
-            router.replace({
-              pathname: '/car/[id]',
-              params: { id: carId },
-            })
-          }
-        >
-          <Text style={styles.link}>
-            Back to car
-          </Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  if (!service || !car) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.title}>
-          Service not found
-        </Text>
-
-        <Text style={styles.description}>
-          This service record or its
-          associated car is unavailable.
-        </Text>
-
+        {(serviceError || carError) && (
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              void refetchService();
+              void refetchCar();
+            }}
+          >
+            <Text style={styles.actionText}>Try Again</Text>
+          </Pressable>
+        )}
         <Pressable
           onPress={() =>
             router.replace({
@@ -348,72 +254,131 @@ export default function EditServiceScreen() {
             })
           }
         >
-          <Text style={styles.link}>
-            Back to car
-          </Text>
+          <Text style={styles.backText}>Back to Car</Text>
         </Pressable>
       </View>
     );
   }
-
-  const defaultValues = getDefaultValues(service);
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <View style={styles.header}>
-        <Text style={styles.title}>
-          Edit service
-        </Text>
+        <Pressable
+          style={styles.backButton}
+          accessibilityLabel="Go back"
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace({
+                pathname: '/service/[id]',
+                params: { id: serviceId, carId },
+              });
+            }
+          }}
+        >
+          <ArrowLeft size={24} color="#102C4B" />
+        </Pressable>
+        <Text style={styles.headerTitle}>Edit Service</Text>
+        <View style={styles.headerSpacer} />
+      </View>
 
-        <Text style={styles.description}>
+      <View style={styles.vehicleRow}>
+        <CarFront size={17} color="#1789E8" />
+        <Text style={styles.vehicleText} numberOfLines={1}>
           {car.make} {car.model} · {car.year}
         </Text>
       </View>
 
       <ServiceForm
         key={service.id}
-        defaultValues={defaultValues}
+        defaultValues={getDefaultValues(service)}
         submitLabel={
-          updateMutation.isPending
-            ? 'Saving changes...'
-            : 'Save changes'
+          updateMutation.isPending ? 'Saving changes...' : 'Save Changes'
         }
         onSubmit={handleSubmit}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#F5F6F8',
-    padding: 20,
-  },
+  screen: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
-    marginBottom: 20,
+    height: 76,
+    backgroundColor: '#DDF2FF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
   },
-  title: {
-    color: '#252A34',
-    fontSize: 26,
+  backButton: {
+    width: 40,
+    height: 44,
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 19,
     fontWeight: '800',
+    color: '#102C4B',
   },
-  description: {
-    color: '#737B89',
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 6,
+  headerSpacer: { width: 40 },
+  vehicleRow: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 24,
+    marginTop: 18,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: '#EFF8FF',
+  },
+  vehicleText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#17365A',
   },
   centered: {
     flex: 1,
+    backgroundColor: '#DDF2FF',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F5F6F8',
-    padding: 24,
+    padding: 28,
+    gap: 14,
   },
-  link: {
-    color: '#246BFD',
+  centerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#102C4B',
+    textAlign: 'center',
+  },
+  centerDescription: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#607C9B',
+    textAlign: 'center',
+  },
+  actionButton: {
+    marginTop: 8,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: '#FFD23F',
+  },
+  actionText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#102C4B',
+  },
+  backText: {
+    fontSize: 14,
     fontWeight: '700',
-    marginTop: 16,
+    color: '#1789E8',
+    marginTop: 6,
   },
 });

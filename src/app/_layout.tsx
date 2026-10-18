@@ -1,5 +1,6 @@
 
 import { AuthProvider } from '@/auth/AuthContext';
+import AppSplashScreen from '@/components/AppSplashScreen';
 
 import {
     QueryClient,
@@ -10,12 +11,14 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
 import {
-    ImageBackground,
     StyleSheet,
     View,
 } from 'react-native';
 
-import { useEffect, useState } from 'react';
+import {
+    useCallback,
+    useState,
+} from 'react';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,32 +29,35 @@ const queryClient = new QueryClient({
   },
 });
 
-const startupImage = require('../../assets/images/lovablecar-main-background.png');
-
-SplashScreen.preventAutoHideAsync().catch(() => {
+// Keep the native splash visible until
+// our React Native screen is ready.
+void SplashScreen.preventAutoHideAsync().catch(() => {
   // Native splash may already be hidden.
 });
 
 export default function RootLayout() {
-  const [imageReady, setImageReady] = useState(false);
+  const [nativeSplashHidden, setNativeSplashHidden] =
+    useState(false);
 
-  useEffect(() => {
-    // The image is bundled locally, so no prefetch is required.
-    setImageReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (imageReady) {
-      SplashScreen.hideAsync().catch(() => {
-        // Native splash may already be hidden.
-      });
+  const handleLayout = useCallback(() => {
+    if (nativeSplashHidden) {
+      return;
     }
-  }, [imageReady]);
+
+    setNativeSplashHidden(true);
+
+    void SplashScreen.hideAsync().catch(() => {
+      // Native splash may already be hidden.
+    });
+  }, [nativeSplashHidden]);
 
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <View style={styles.container}>
+        <View
+          style={styles.container}
+          onLayout={handleLayout}
+        >
           <Stack>
             <Stack.Screen
               name="login"
@@ -107,7 +113,7 @@ export default function RootLayout() {
               name="car/[id]"
               options={{
                 title: 'Car',
-                 headerShown: false,
+                headerShown: false,
               }}
             />
 
@@ -133,12 +139,13 @@ export default function RootLayout() {
             />
           </Stack>
 
-          {!imageReady && (
-            <ImageBackground
-              source={startupImage}
-              style={styles.startupBackground}
-              resizeMode="cover"
-            />
+          {!nativeSplashHidden && (
+            <View
+              pointerEvents="none"
+              style={styles.splashOverlay}
+            >
+              <AppSplashScreen />
+            </View>
           )}
         </View>
       </AuthProvider>
@@ -149,10 +156,12 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#DDF2FF',
   },
 
-  startupBackground: {
+  splashOverlay: {
     ...StyleSheet.absoluteFill,
+    zIndex: 100,
     backgroundColor: '#DDF2FF',
   },
 });

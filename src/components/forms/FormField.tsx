@@ -1,15 +1,8 @@
 
+import type { LucideIcon } from 'lucide-react-native';
+import { Controller, type Control, type FieldPath, type FieldValues } from 'react-hook-form';
 import {
-    Controller,
-    type Control,
-    type FieldPath,
-    type FieldValues,
-} from 'react-hook-form';
-import {
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+    StyleSheet, Text, TextInput, View,
     type TextInputProps,
 } from 'react-native';
 
@@ -24,6 +17,9 @@ interface FormFieldProps<T extends FieldValues> {
   autoCapitalize?: TextInputProps['autoCapitalize'];
   maxLength?: number;
   autoCorrect?: boolean;
+  icon?: LucideIcon;
+  multiline?: boolean;
+  numberOfLines?: number;
 }
 
 export default function FormField<T extends FieldValues>({
@@ -35,6 +31,9 @@ export default function FormField<T extends FieldValues>({
   autoCapitalize = 'sentences',
   maxLength,
   autoCorrect,
+  icon: Icon,
+  multiline = false,
+  numberOfLines,
 }: FormFieldProps<T>) {
   return (
     <View style={styles.container}>
@@ -45,24 +44,36 @@ export default function FormField<T extends FieldValues>({
         name={name}
         render={({ field, fieldState }) => (
           <>
-            <TextInput
-              value={String(field.value ?? '')}
-              onChangeText={field.onChange}
-              onBlur={field.onBlur}
-              placeholder={placeholder}
-              placeholderTextColor="#A3A3A3"
-              keyboardType={keyboardType}
-              autoCapitalize={autoCapitalize}
-              autoCorrect={autoCorrect}
-              maxLength={maxLength}
-              accessibilityLabel={label}
-              accessibilityHint={fieldState.error?.message}
-              style={[
-                styles.input,
-                fieldState.error && styles.inputError,
-              ]}
-            />
-
+            <View style={[
+              styles.inputContainer,
+              multiline && styles.multilineContainer,
+              fieldState.error && styles.inputError,
+            ]}>
+              {Icon && (
+                <Icon
+                  size={20}
+                  color="#17365A"
+                  strokeWidth={2}
+                  style={multiline ? styles.multilineIcon : undefined}
+                />
+              )}
+              <TextInput
+                value={String(field.value ?? '')}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                placeholder={placeholder}
+                placeholderTextColor="#A4B7C9"
+                keyboardType={keyboardType}
+                autoCapitalize={autoCapitalize}
+                autoCorrect={autoCorrect}
+                maxLength={maxLength}
+                multiline={multiline}
+                numberOfLines={numberOfLines}
+                textAlignVertical={multiline ? 'top' : 'center'}
+                accessibilityLabel={label}
+                style={[styles.input, multiline && styles.multilineInput]}
+              />
+            </View>
             <FormError message={fieldState.error?.message} />
           </>
         )}
@@ -72,25 +83,43 @@ export default function FormField<T extends FieldValues>({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: 8,
-  },
+  container: { gap: 8 },
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#404040',
+    color: '#607C9B',
+    marginLeft: 3,
+  },
+  inputContainer: {
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#DCEAF5',
+    borderRadius: 12,
+    backgroundColor: '#F8FBFF',
   },
   input: {
-    minHeight: 52,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-    backgroundColor: '#FFFFFF',
-    fontSize: 16,
-    color: '#171717',
+    flex: 1,
+    minWidth: 0,
+    minHeight: 48,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#17365A',
   },
-  inputError: {
-    borderColor: '#EF4444',
+  multilineContainer: {
+    minHeight: 94,
+    alignItems: 'flex-start',
+    paddingTop: 12,
   },
+  multilineIcon: { marginTop: 3 },
+  multilineInput: {
+    minHeight: 80,
+    paddingTop: 0,
+    lineHeight: 22,
+  },
+  inputError: { borderColor: '#D84B4B' },
 });
