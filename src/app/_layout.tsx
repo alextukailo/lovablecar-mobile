@@ -13,7 +13,7 @@ import * as SplashScreen from 'expo-splash-screen';
 
 import {
     StyleSheet,
-    View,
+    View
 } from 'react-native';
 
 import {
@@ -29,12 +29,6 @@ const queryClient = new QueryClient({
       staleTime: 30_000,
     },
   },
-});
-
-// Keep the native splash visible until
-// our React Native screen is ready.
-void SplashScreen.preventAutoHideAsync().catch(() => {
-  // Native splash may already be hidden.
 });
 
 export default function RootLayout() {
@@ -166,9 +160,7 @@ export default function RootLayout() {
 
             <Stack.Screen
               name="service/[id]"
-              options={{
-                title: 'Service details',
-              }}
+              options={{ headerShown: false }}
             />
 
             <Stack.Screen

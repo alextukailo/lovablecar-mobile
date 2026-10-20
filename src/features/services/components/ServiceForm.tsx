@@ -1,33 +1,43 @@
 
+import { Ionicons } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-    CalendarDays, Camera, Check, ChevronDown,
-    Coins, FileText, Image as ImageIcon,
-    MapPin, Route,
-} from 'lucide-react-native';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Controller, useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
+
 import {
-    ActivityIndicator, Pressable, ScrollView,
-    StyleSheet, Text,
-    View
+    ActivityIndicator,
+    Pressable,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 
-import FormError from '../../../components/forms/FormError';
-import FormField from '../../../components/forms/FormField';
 import {
-    serviceSchema,
+    createServiceSchema,
     supportedCurrencyOptions,
     type ServiceFormValues,
 } from '../schemas/service.schema';
 
-interface ServiceFormProps {
+type Props = {
   defaultValues: ServiceFormValues;
   submitLabel: string;
   onSubmit: (values: ServiceFormValues) => void | Promise<void>;
   onScanDocument?: () => void;
   onChooseDocument?: () => void;
-}
+  beforeSubmit?: ReactNode;
+};
+
+const C = {
+  navy: '#102647',
+  blue: '#41668B',
+  border: '#DCE8F3',
+  sky: '#F2F9FF',
+  white: '#FFFFFF',
+  yellow: '#FFD33F',
+  muted: '#91ABC5',
+};
 
 export default function ServiceForm({
   defaultValues,
@@ -35,202 +45,374 @@ export default function ServiceForm({
   onSubmit,
   onScanDocument,
   onChooseDocument,
-}: ServiceFormProps) {
+  beforeSubmit,
+}: Props) {
+  const { t, i18n } = useTranslation();
+  const ru = i18n.resolvedLanguage?.startsWith('ru') ?? false;
+  const tr = (en: string, russian: string) =>
+    ru ? russian : en;
+
+  const [tab, setTab] = useState<'manual' | 'scan'>('manual');
   const [currencyOpen, setCurrencyOpen] = useState(false);
 
   const {
     control,
     handleSubmit,
-    formState: { isSubmitting },
+    formState: { errors, isSubmitting },
   } = useForm<ServiceFormValues>({
-    resolver: zodResolver(serviceSchema),
+    resolver: zodResolver(
+      createServiceSchema((key) => t(`serviceValidation.${key}`)),
+    ),
     defaultValues,
     mode: 'onBlur',
-    reValidateMode: 'onChange',
   });
 
-  const submit = handleSubmit(async (values) => {
-    await onSubmit(values);
-  });
+  const field = (
+    name: keyof ServiceFormValues,
+    title: string,
+    icon: keyof typeof Ionicons.glyphMap,
+    placeholder: string,
+    multiline = false,
+    keyboardType:
+      | 'default'
+      | 'number-pad'
+      | 'decimal-pad' = 'default',
+  ) => (
+    <View style={styles.field}>
+      <Text style={styles.label}>{title}</Text>
+
+      <View
+        style={[
+          styles.inputBox,
+          multiline && styles.multilineBox,
+        ]}
+      >
+        <Ionicons
+          name={icon}
+          size={20}
+          color={C.navy}
+          style={styles.fieldIcon}
+        />
+
+        <Controller
+          control={control}
+          name={name}
+          render={({ field: f }) => (
+            <TextInput
+              value={f.value}
+              onChangeText={f.onChange}
+              onBlur={f.onBlur}
+              placeholder={placeholder}
+              placeholderTextColor={C.muted}
+              keyboardType={keyboardType}
+              multiline={multiline}
+              textAlignVertical={
+                multiline ? 'top' : 'center'
+              }
+              style={[
+                styles.input,
+                multiline && styles.multilineInput,
+              ]}
+            />
+          )}
+        />
+      </View>
+
+      {errors[name] && (
+        <Text style={styles.error}>
+          {errors[name]?.message}
+        </Text>
+      )}
+    </View>
+  );
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.fields}>
-          <FormField
-            control={control}
-            name="date"
-            label="Date"
-            placeholder="YYYY-MM-DD"
-            keyboardType="numbers-and-punctuation"
-            autoCapitalize="none"
-            autoCorrect={false}
-            icon={CalendarDays}
-          />
+    <View style={styles.root}>
+      {/* TABS */}
 
-          <FormField
-            control={control}
-            name="mileage"
-            label="Mileage (km)"
-            placeholder="128500"
-            keyboardType="number-pad"
-            icon={Route}
-          />
+      <View style={styles.tabs}>
+        <Pressable
+          style={[
+            styles.tab,
+            tab === 'manual' && styles.activeTab,
+          ]}
+          onPress={() => setTab('manual')}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              tab === 'manual' && styles.activeTabText,
+            ]}
+          >
+            {tr('Manual', 'Вручную')}
+          </Text>
+        </Pressable>
 
-          <FormField
-            control={control}
-            name="serviceName"
-            label="Service description"
-            placeholder="Describe the service performed"
-            icon={FileText}
-            multiline
-            numberOfLines={4}
-          />
+        <Pressable
+          style={[
+            styles.tab,
+            tab === 'scan' && styles.activeTab,
+          ]}
+          onPress={() => setTab('scan')}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              tab === 'scan' && styles.activeTabText,
+            ]}
+          >
+            {tr('Scan Document', 'Сканировать')}
+          </Text>
+        </Pressable>
+      </View>
+
+      {tab === 'scan' ? (
+        /* SCAN TAB */
+
+        <View style={styles.scanSection}>
+          <View style={styles.scanIllustration}>
+            <Ionicons
+              name="document-text-outline"
+              size={78}
+              color="#82B5DF"
+            />
+
+            <View style={styles.cameraCircle}>
+              <Ionicons
+                name="camera"
+                size={34}
+                color="white"
+              />
+            </View>
+          </View>
+
+          <Text style={styles.scanTitle}>
+            {tr(
+              'Scan Service Document',
+              'Сканировать документ',
+            )}
+          </Text>
+
+          <Text style={styles.scanDescription}>
+            {tr(
+              'Take a photo or choose a file to automatically fill in the service details.',
+              'Сфотографируйте документ или выберите файл для автоматического заполнения.',
+            )}
+          </Text>
+
+          <Pressable
+            style={[
+              styles.saveButton,
+              !onScanDocument && styles.disabled,
+            ]}
+            onPress={onScanDocument}
+            disabled={!onScanDocument}
+          >
+            <Ionicons
+              name="camera"
+              size={22}
+              color={C.navy}
+            />
+
+            <Text style={styles.saveText}>
+              {tr('Take Photo', 'Сделать фото')}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.galleryButton,
+              !onChooseDocument && styles.disabled,
+            ]}
+            onPress={onChooseDocument}
+            disabled={!onChooseDocument}
+          >
+            <Ionicons
+              name="image-outline"
+              size={22}
+              color={C.navy}
+            />
+
+            <Text style={styles.galleryText}>
+              {tr(
+                'Choose from Gallery',
+                'Выбрать из галереи',
+              )}
+            </Text>
+          </Pressable>
+        </View>
+      ) : (
+        /* MANUAL TAB */
+
+        <View style={styles.form}>
+          {field(
+            'date',
+            tr('Date', 'Дата'),
+            'calendar-outline',
+            'YYYY-MM-DD',
+          )}
+
+          {field(
+            'mileage',
+            tr('Mileage (km)', 'Пробег (км)'),
+            'speedometer-outline',
+            '126665',
+            false,
+            'number-pad',
+          )}
+
+          {field(
+            'serviceName',
+            tr(
+              'Service description',
+              'Описание обслуживания',
+            ),
+            'document-text-outline',
+            tr(
+              'Describe the service...',
+              'Описание работ...',
+            ),
+            true,
+          )}
+
+          {/* TOTAL COST */}
 
           <View style={styles.field}>
-            <Text style={styles.label}>Total cost</Text>
+            <Text style={styles.label}>
+              {tr('Total cost', 'Стоимость')}
+            </Text>
 
             <View style={styles.costRow}>
-              <View style={styles.costField}>
-                <FormField
+              <View
+                style={[
+                  styles.inputBox,
+                  styles.costInput,
+                ]}
+              >
+                <Ionicons
+                  name="cash-outline"
+                  size={20}
+                  color={C.navy}
+                />
+
+                <Controller
                   control={control}
                   name="totalCost"
-                  label=""
-                  placeholder="0.00"
-                  keyboardType="decimal-pad"
-                  icon={Coins}
+                  render={({ field: f }) => (
+                    <TextInput
+                      value={f.value}
+                      onChangeText={f.onChange}
+                      onBlur={f.onBlur}
+                      keyboardType="decimal-pad"
+                      placeholder="0.00"
+                      placeholderTextColor={C.muted}
+                      style={styles.input}
+                    />
+                  )}
                 />
               </View>
 
               <Controller
                 control={control}
                 name="currency"
-                render={({ field, fieldState }) => (
+                render={({ field: f }) => (
                   <View style={styles.currencyWrapper}>
                     <Pressable
                       style={styles.currencyButton}
-                      onPress={() => setCurrencyOpen(!currencyOpen)}
-                      accessibilityRole="button"
-                      accessibilityLabel="Choose currency"
+                      onPress={() =>
+                        setCurrencyOpen(!currencyOpen)
+                      }
                     >
-                      <Text style={styles.currencyValue}>
-                        {field.value}
+                      <Text style={styles.currencyText}>
+                        {f.value}
                       </Text>
-                      <ChevronDown size={16} color="#17365A" />
+
+                      <Ionicons
+                        name={
+                          currencyOpen
+                            ? 'chevron-up'
+                            : 'chevron-down'
+                        }
+                        size={17}
+                        color={C.navy}
+                      />
                     </Pressable>
-                    <FormError message={fieldState.error?.message} />
+
+                    {currencyOpen && (
+                      <View style={styles.currencyMenu}>
+                        {supportedCurrencyOptions.map(
+                          (option) => (
+                            <Pressable
+                              key={option.value}
+                              style={styles.currencyItem}
+                              onPress={() => {
+                                f.onChange(option.value);
+                                setCurrencyOpen(false);
+                              }}
+                            >
+                              <Text
+                                style={styles.currencyText}
+                              >
+                                {option.label}
+                              </Text>
+                            </Pressable>
+                          ),
+                        )}
+                      </View>
+                    )}
                   </View>
                 )}
               />
             </View>
-          </View>
 
-          <FormField
-            control={control}
-            name="workshop"
-            label="Workshop"
-            placeholder="Workshop name (optional)"
-            icon={MapPin}
-          />
-        </View>
-
-        {(onScanDocument || onChooseDocument) && (
-          <View style={styles.scanSection}>
-            <Text style={styles.scanSectionTitle}>
-              Service document
-            </Text>
-            <Text style={styles.scanSectionDescription}>
-              Add information from a service document
-            </Text>
-
-            {onScanDocument && (
-              <Pressable
-                onPress={onScanDocument}
-                style={styles.secondaryButton}
-              >
-                <Camera size={20} color="#102C4B" />
-                <Text style={styles.secondaryText}>
-                  Scan Service Document
-                </Text>
-              </Pressable>
-            )}
-
-            {onChooseDocument && (
-              <Pressable
-                onPress={onChooseDocument}
-                style={styles.secondaryButton}
-              >
-                <ImageIcon size={20} color="#102C4B" />
-                <Text style={styles.secondaryText}>
-                  Choose from Gallery
-                </Text>
-              </Pressable>
+            {errors.totalCost && (
+              <Text style={styles.error}>
+                {errors.totalCost.message}
+              </Text>
             )}
           </View>
-        )}
-      </ScrollView>
 
-      <View style={styles.footer}>
-        <Pressable
-          onPress={submit}
-          disabled={isSubmitting}
-          style={[
-            styles.submitButton,
-            isSubmitting && styles.disabledButton,
-          ]}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="#102C4B" />
-          ) : (
-            <Text style={styles.submitText}>{submitLabel}</Text>
+          {/* WORKSHOP */}
+
+          {field(
+            'workshop',
+            tr('Workshop', 'Автосервис'),
+            'business-outline',
+            tr(
+              'Workshop name',
+              'Название автосервиса',
+            ),
           )}
-        </Pressable>
-      </View>
 
-      {currencyOpen && (
-        <View style={styles.currencyOverlay}>
+          {/* MAINTENANCE SCHEDULE
+              This section is displayed only when
+              the parent screen supplies it.
+              It is INSIDE the manual form,
+              immediately before Save Changes.
+          */}
+
+          {beforeSubmit}
+
+          {/* SAVE CHANGES */}
+
           <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={() => setCurrencyOpen(false)}
-          />
-          <View style={styles.currencySheet}>
-            <Text style={styles.sheetTitle}>Select currency</Text>
-
-            <Controller
-              control={control}
-              name="currency"
-              render={({ field }) => (
-                <>
-                  {supportedCurrencyOptions.map((option) => {
-                    const selected = field.value === option.value;
-
-                    return (
-                      <Pressable
-                        key={option.value}
-                        style={styles.currencyOption}
-                        onPress={() => {
-                          field.onChange(option.value);
-                          setCurrencyOpen(false);
-                        }}
-                      >
-                        <Text style={styles.currencyOptionText}>
-                          {option.label}
-                        </Text>
-                        {selected && (
-                          <Check size={18} color="#1789E8" />
-                        )}
-                      </Pressable>
-                    );
-                  })}
-                </>
-              )}
-            />
-          </View>
+            style={[
+              styles.saveButton,
+              isSubmitting && styles.disabled,
+            ]}
+            disabled={isSubmitting}
+            onPress={() =>
+              void handleSubmit(onSubmit)()
+            }
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color={C.navy} />
+            ) : (
+              <Text style={styles.saveText}>
+                {submitLabel}
+              </Text>
+            )}
+          </Pressable>
         </View>
       )}
     </View>
@@ -238,127 +420,194 @@ export default function ServiceForm({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  scroll: { flex: 1 },
-  content: {
-    paddingHorizontal: 24,
-    paddingTop: 22,
-    paddingBottom: 30,
+  root: {
+    width: '100%',
+    paddingBottom: 20,
   },
-  fields: { gap: 20 },
-  field: { gap: 8 },
-  label: {
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: '#F5FAFE',
+    borderRadius: 16,
+    marginBottom: 22,
+    overflow: 'hidden',
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    backgroundColor: C.white,
+    borderBottomColor: '#FFC400',
+  },
+  tabText: {
+    color: C.blue,
     fontSize: 14,
-    fontWeight: '600',
-    color: '#607C9B',
-    marginLeft: 3,
+    fontWeight: '500',
+  },
+  activeTabText: {
+    color: C.navy,
+    fontWeight: '700',
+  },
+  form: {
+    gap: 18,
+  },
+  field: {
+    gap: 7,
+  },
+  label: {
+    color: C.blue,
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  inputBox: {
+    minHeight: 52,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: '#FBFDFF',
+    borderRadius: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    gap: 12,
+  },
+  fieldIcon: {
+    alignSelf: 'center',
+  },
+  input: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
+    color: C.navy,
+    paddingVertical: 12,
+  },
+  multilineBox: {
+    minHeight: 88,
+    alignItems: 'flex-start',
+  },
+  multilineInput: {
+    minHeight: 80,
   },
   costRow: {
     flexDirection: 'row',
     gap: 10,
     alignItems: 'flex-start',
   },
-  costField: { flex: 1 },
-  currencyWrapper: { width: 104, paddingTop: 22 },
+  costInput: {
+    flex: 1,
+  },
+  currencyWrapper: {
+    width: 104,
+    position: 'relative',
+    zIndex: 10,
+  },
   currencyButton: {
-    height: 50,
-    paddingHorizontal: 12,
+    height: 52,
+    backgroundColor: C.sky,
+    borderColor: C.border,
     borderWidth: 1,
-    borderColor: '#DCEAF5',
-    borderRadius: 12,
-    backgroundColor: '#F8FBFF',
+    borderRadius: 13,
+    paddingHorizontal: 13,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  currencyValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#17365A',
+  currencyText: {
+    color: C.navy,
+    fontSize: 14,
+    fontWeight: '600',
   },
-  scanSection: {
-    marginTop: 28,
-    paddingTop: 22,
-    borderTopWidth: 1,
-    borderTopColor: '#EDF3F8',
-    gap: 12,
+  currencyMenu: {
+    backgroundColor: C.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    marginTop: 4,
+    maxHeight: 210,
   },
-  scanSectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#102C4B',
+  currencyItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.border,
   },
-  scanSectionDescription: {
-    fontSize: 13,
-    color: '#607C9B',
-    marginBottom: 3,
-  },
-  secondaryButton: {
-    minHeight: 52,
-    borderRadius: 15,
-    backgroundColor: '#E8F4FC',
-    flexDirection: 'row',
+  saveButton: {
+    width: '100%',
+    marginTop: 15,
+    minHeight: 56,
+    borderRadius: 24,
+    backgroundColor: C.yellow,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
     gap: 10,
   },
-  secondaryText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#102C4B',
-  },
-  footer: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 18,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#EDF3F8',
-  },
-  submitButton: {
-    minHeight: 56,
-    borderRadius: 18,
-    backgroundColor: '#FFD23F',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  disabledButton: { opacity: 0.5 },
-  submitText: {
+  saveText: {
+    color: C.navy,
     fontSize: 16,
     fontWeight: '800',
-    color: '#102C4B',
   },
-  currencyOverlay: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 100,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(16,44,75,0.18)',
+  disabled: {
+    opacity: 0.6,
   },
-  currencySheet: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 28,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    backgroundColor: '#FFFFFF',
+  error: {
+    color: '#D04B4B',
+    fontSize: 12,
+    marginLeft: 8,
   },
-  sheetTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#102C4B',
-    marginBottom: 12,
-  },
-  currencyOption: {
-    minHeight: 46,
-    flexDirection: 'row',
+  scanSection: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#EDF3F8',
+    paddingHorizontal: 8,
+    paddingTop: 24,
+    gap: 14,
   },
-  currencyOptionText: {
+  scanIllustration: {
+    width: 190,
+    height: 170,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  cameraCircle: {
+    position: 'absolute',
+    bottom: 5,
+    right: 15,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#258FE7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scanTitle: {
+    fontSize: 21,
+    fontWeight: '800',
+    color: C.navy,
+    textAlign: 'center',
+  },
+  scanDescription: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#17365A',
+    lineHeight: 23,
+    color: C.blue,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  galleryButton: {
+    backgroundColor: '#E5F2FC',
+    borderRadius: 24,
+    minHeight: 56,
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+  },
+  galleryText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.navy,
   },
 });

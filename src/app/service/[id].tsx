@@ -1,4 +1,5 @@
 
+import { Ionicons } from '@expo/vector-icons';
 import {
     useMutation,
     useQuery,
@@ -6,22 +7,9 @@ import {
 } from '@tanstack/react-query';
 import {
     router,
-    Stack,
     useLocalSearchParams,
 } from 'expo-router';
-import {
-    ArrowLeft,
-    CarFront,
-    ChevronRight,
-    Coins,
-    FileText,
-    Gauge,
-    ImagePlus,
-    MapPin,
-    Pencil,
-    Trash2,
-    Wrench,
-} from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
     Alert,
@@ -32,142 +20,134 @@ import {
     Text,
     View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { api } from '../../../lib/api';
 import { useCar } from '../../features/cars/hooks/useCars';
 
-const COLORS = {
-  navy: '#102C4B',
-  text: '#17365A',
-  muted: '#607C9B',
-  sky: '#DDF2FF',
-  blue: '#1789E8',
-  yellow: '#FFD23F',
-  white: '#FFFFFF',
-  border: '#E5EEF6',
-  danger: '#D84B4B',
+// --------------------------------------------------
+// TYPES
+// --------------------------------------------------
+
+type Schedule = {
+  enabled: boolean;
+  intervalKm: number | null;
+  intervalMonths: number | null;
+  nextDueMileage: number | null;
+  nextDueDate: string | null;
+  warningKm: number;
+  warningDays: number;
 };
 
-interface ApiServiceRecord {
+type Service = {
   id: string;
   carId: string;
   date: string;
   mileage: number;
   title: string;
   description?: string | null;
-  cost?: string | number | null;
+  cost?: number | string | null;
   currency: string;
   workshop?: string | null;
-  createdAt: string;
-}
+  maintenanceSchedule?: Schedule | null;
+};
 
-function firstParam(
+type RouteParams = {
+  id?: string | string[];
+  serviceId?: string | string[];
+  carId?: string | string[];
+  vehicleId?: string | string[];
+};
+
+// --------------------------------------------------
+// COLORS
+// --------------------------------------------------
+
+const COLORS = {
+  navy: '#102647',
+  blue: '#486B90',
+  background: '#F1F8FF',
+  white: '#FFFFFF',
+  border: '#E2ECF5',
+  divider: '#E8EFF6',
+  lightBlue: '#EAF5FF',
+  muted: '#8FB4D5',
+  red: '#C44A4A',
+  green: '#16834A',
+};
+
+// --------------------------------------------------
+// HELPERS
+// --------------------------------------------------
+
+function first(
   value?: string | string[],
 ): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
+  return Array.isArray(value)
+    ? value[0]
+    : value;
 }
 
-async function fetchService(
-  carId: string,
-  serviceId: string,
-): Promise<ApiServiceRecord> {
-  const response = await api.get<ApiServiceRecord>(
-    `/cars/${carId}/services/${serviceId}`,
-  );
-  return response.data;
-}
+function formatDate(
+  value: string | null | undefined,
+  locale: string,
+): string {
+  if (!value) {
+    return '—';
+  }
 
-async function deleteService(
-  carId: string,
-  serviceId: string,
-): Promise<void> {
-  await api.delete(
-    `/cars/${carId}/services/${serviceId}`,
-  );
-}
-
-function formatDate(value: string): string {
   const date = new Date(
-    `${value.slice(0, 10)}T12:00:00`,
+    `${value.slice(0, 10)}T12:00:00Z`,
   );
 
   if (Number.isNaN(date.getTime())) {
-    return value;
+    return '—';
   }
 
-  return date.toLocaleDateString('en-GB', {
-    day: '2-digit',
+  return date.toLocaleDateString(locale, {
+    day: 'numeric',
     month: 'short',
     year: 'numeric',
+    timeZone: 'UTC',
   });
 }
 
-function formatNumber(value: number): string {
-  return value.toLocaleString('en-US');
-}
+// --------------------------------------------------
+// DETAIL ROW
+// --------------------------------------------------
 
-function formatCost(
-  value: string | number | null | undefined,
-): string {
-  if (value === null || value === undefined) {
-    return 'Not specified';
-  }
-
-  const amount = Number(value);
-
-  if (!Number.isFinite(amount)) {
-    return 'Not specified';
-  }
-
-  return amount.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+type DetailRowProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  last?: boolean;
+};
 
 function DetailRow({
   icon,
   label,
   value,
   last = false,
-  vertical = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  last?: boolean;
-  vertical?: boolean;
-}) {
+}: DetailRowProps) {
   return (
     <View
       style={[
         styles.detailRow,
-        !last && styles.detailBorder,
-        vertical && styles.verticalRow,
+        !last && styles.divider,
       ]}
     >
-      <View style={styles.detailIcon}>
-        {icon}
-      </View>
+      <Ionicons
+        name={icon}
+        size={21}
+        color={COLORS.navy}
+        style={styles.rowIcon}
+      />
 
-      <View
-        style={[
-          styles.detailContent,
-          vertical && styles.verticalContent,
-        ]}
-      >
-        <Text style={styles.detailLabel}>
+      <View style={styles.rowBody}>
+        <Text style={styles.rowLabel}>
           {label}
         </Text>
 
-        <Text
-          style={[
-            styles.detailValue,
-            vertical && styles.descriptionValue,
-          ]}
-          numberOfLines={vertical ? undefined : 3}
-        >
+        <Text style={styles.rowValue}>
           {value}
         </Text>
       </View>
@@ -175,86 +155,116 @@ function DetailRow({
   );
 }
 
-function StateView({
-  title,
-  description,
-  buttonText,
-  onPress,
-}: {
-  title: string;
-  description: string;
-  buttonText: string;
-  onPress: () => void;
-}) {
-  return (
-    <View style={styles.stateContainer}>
-      <View style={styles.stateIcon}>
-        <Wrench size={30} color={COLORS.blue} />
-      </View>
-
-      <Text style={styles.stateTitle}>
-        {title}
-      </Text>
-
-      <Text style={styles.stateDescription}>
-        {description}
-      </Text>
-
-      <Pressable
-        style={styles.stateButton}
-        onPress={onPress}
-      >
-        <Text style={styles.stateButtonText}>
-          {buttonText}
-        </Text>
-      </Pressable>
-    </View>
-  );
-}
+// --------------------------------------------------
+// SCREEN
+// --------------------------------------------------
 
 export default function ServiceDetailsScreen() {
-  const insets = useSafeAreaInsets();
+  const { i18n } = useTranslation();
 
-  const params = useLocalSearchParams<{
+  const isRussian =
+    i18n.resolvedLanguage?.startsWith('ru') ??
+    false;
+
+  const tr = (
+    english: string,
+    russian: string,
+  ) => (isRussian ? russian : english);
+
+  const locale = isRussian
+    ? 'ru-RU'
+    : 'en-GB';
+
+ const params = useLocalSearchParams<{
     id?: string | string[];
+    serviceId?: string | string[];
     carId?: string | string[];
     vehicleId?: string | string[];
   }>();
 
-  const serviceId = firstParam(params.id);
+  const first = (value?: string | string[]) =>
+  Array.isArray(value) ? value[0] : value;
 
-  const carId =
-    firstParam(params.carId) ??
-    firstParam(params.vehicleId);
+const serviceId =
+  first(params.id) ||
+  first(params.serviceId);
+
+const routeCarId =
+  first(params.carId) ||
+  first(params.vehicleId);
 
   const queryClient = useQueryClient();
 
   const serviceQuery = useQuery({
     queryKey: [
-      'cars',
-      carId,
-      'services',
+      'service',
       serviceId,
+      routeCarId,
     ],
-    queryFn: () => fetchService(carId!, serviceId!),
-    enabled: Boolean(carId && serviceId),
+
+    enabled: Boolean(serviceId),
+
+    queryFn: async (): Promise<Service> => {
+      if (!serviceId) {
+        throw new Error('Missing service ID');
+      }
+
+      // When the caller supplied carId, preserve
+      // the existing car-scoped endpoint.
+      if (routeCarId) {
+        const response = await api.get<Service>(
+          `/cars/${routeCarId}/services/${serviceId}`,
+        );
+
+        return response.data;
+      }
+
+      // Home / Recent Services supplies only id.
+      // Use the standalone service detail endpoint.
+      const response = await api.get<Service>(
+        `/service/${serviceId}`,
+      );
+
+      return response.data;
+    },
   });
+
+  const service = serviceQuery.data;
+
+  // Resolve carId from the loaded service when
+  // it was not included in route parameters.
+  const carId =
+    service?.carId ??
+    routeCarId;
 
   const carQuery = useCar(carId);
 
-  const service = serviceQuery.data;
-  const car = carQuery.data;
+  // --------------------------------------------------
+  // DELETE SERVICE
+  // --------------------------------------------------
 
   const deleteMutation = useMutation({
-    mutationFn: () => {
-      if (!carId || !serviceId) {
-        throw new Error('Missing car or service ID');
+    mutationFn: async () => {
+      if (!serviceId || !carId) {
+        throw new Error(
+          'Missing service or car ID',
+        );
       }
 
-      return deleteService(carId, serviceId);
+      await api.delete(
+        `/cars/${carId}/services/${serviceId}`,
+      );
     },
 
     onSuccess: async () => {
+      queryClient.removeQueries({
+        queryKey: [
+          'service',
+          serviceId,
+          routeCarId,
+        ],
+      });
+
       queryClient.removeQueries({
         queryKey: [
           'cars',
@@ -264,845 +274,795 @@ export default function ServiceDetailsScreen() {
         ],
       });
 
-      await queryClient.invalidateQueries({
-        queryKey: ['cars', carId, 'services'],
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: [
+            'cars',
+            carId,
+            'services',
+          ],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: ['cars'],
+        }),
+
+        queryClient.invalidateQueries({
+          queryKey: ['maintenance'],
+        }),
+      ]);
+
+      router.replace({
+        pathname: '/car/[id]',
+        params: {
+          id: carId!,
+        },
       });
     },
   });
 
-  const goBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/(tabs)/services');
-    }
-  };
+  // --------------------------------------------------
+  // ACTIONS
+  // --------------------------------------------------
 
-  const openEdit = () => {
-    if (!service) return;
+  const handleEdit = () => {
+    if (!serviceId || !carId) {
+      return;
+    }
 
     router.push({
       pathname: '/service/edit',
       params: {
-        id: service.id,
-        carId: service.carId,
+        id: serviceId,
+        carId,
       },
     });
   };
 
   const handleDelete = () => {
-    if (!service || deleteMutation.isPending) {
-      return;
-    }
-
     Alert.alert(
-      'Delete service?',
-      `Delete "${service.title}"? This action cannot be undone.`,
+      tr(
+        'Delete service?',
+        'Удалить обслуживание?',
+      ),
+      tr(
+        'This cannot be undone.',
+        'Это действие нельзя отменить.',
+      ),
       [
         {
-          text: 'Cancel',
+          text: tr('Cancel', 'Отмена'),
           style: 'cancel',
         },
         {
-          text: 'Delete',
+          text: tr('Delete', 'Удалить'),
           style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteMutation.mutateAsync();
-
-              router.replace({
-                pathname: '/car/[id]',
-                params: {
-                  id: service.carId,
+          onPress: () => {
+            deleteMutation.mutate(
+              undefined,
+              {
+                onError: () => {
+                  Alert.alert(
+                    tr('Error', 'Ошибка'),
+                    tr(
+                      'Could not delete service.',
+                      'Не удалось удалить обслуживание.',
+                    ),
+                  );
                 },
-              });
-            } catch (error) {
-              Alert.alert(
-                'Could not delete service',
-                error instanceof Error
-                  ? error.message
-                  : 'Please try again.',
-              );
-            }
+              },
+            );
           },
         },
       ],
     );
   };
 
-  const carName = car
-    ? `${car.make} ${car.model}`
-    : 'Vehicle';
+  const openCar = () => {
+    if (!carId) {
+      router.push('/(tabs)/cars');
+      return;
+    }
 
-  const costText = service
-    ? service.cost === null ||
-      service.cost === undefined
-      ? 'Not specified'
-      : `${formatCost(service.cost)} ${
-          service.currency || 'BYN'
-        }`
-    : '—';
+    router.push({
+      pathname: '/car/[id]',
+      params: {
+        id: carId,
+      },
+    });
+  };
 
-  const description =
-    service?.description?.trim() ||
-    service?.title ||
-    'No description provided';
+  // --------------------------------------------------
+  // EMPTY / LOADING / ERROR STATES
+  // --------------------------------------------------
 
-  const loading =
-    Boolean(carId && serviceId) &&
-    serviceQuery.isLoading;
+  if (!serviceId) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>
+          {tr(
+            'Missing service ID',
+            'Нет идентификатора обслуживания',
+          )}
+        </Text>
 
-  const renderContent = () => {
-    if (!carId || !serviceId) {
-      return (
-        <StateView
-          title="Missing service information"
-          description="Open a service record from your service history."
-          buttonText="Back to Services"
+        <Pressable
           onPress={() =>
-            router.replace('/(tabs)/services')
+            router.replace('/(tabs)/cars')
           }
-        />
-      );
-    }
-
-    if (loading) {
-      return (
-        <View style={styles.loading}>
-          <ActivityIndicator
-            size="large"
-            color={COLORS.blue}
-          />
-          <Text style={styles.loadingText}>
-            Loading service details...
+        >
+          <Text style={styles.link}>
+            {tr(
+              'Back to cars',
+              'К автомобилям',
+            )}
           </Text>
-        </View>
-      );
-    }
+        </Pressable>
+      </View>
+    );
+  }
 
-    if (serviceQuery.isError) {
-      return (
-        <StateView
-          title="Could not load service"
-          description={
-            serviceQuery.error instanceof Error
-              ? serviceQuery.error.message
-              : 'Please check your connection.'
-          }
-          buttonText="Try Again"
+  if (serviceQuery.isPending) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator
+          size="large"
+          color="#E9B900"
+        />
+      </View>
+    );
+  }
+
+  if (serviceQuery.isError || !service) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>
+          {tr(
+            'Could not load service',
+            'Не удалось загрузить обслуживание',
+          )}
+        </Text>
+
+        <Pressable
           onPress={() =>
             void serviceQuery.refetch()
           }
-        />
-      );
-    }
+        >
+          <Text style={styles.link}>
+            {tr('Try again', 'Повторить')}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
 
-    if (!service) {
-      return (
-        <StateView
-          title="Service not found"
-          description="This service record may have been deleted."
-          buttonText="Back to Services"
-          onPress={() =>
-            router.replace('/(tabs)/services')
-          }
-        />
-      );
-    }
+  // --------------------------------------------------
+  // DISPLAY VALUES
+  // --------------------------------------------------
 
-    return (
-      <>
-        <View style={styles.heroTitleCard}>
-          <Text style={styles.serviceTitle}>
+  const cost =
+    service.cost == null
+      ? '—'
+      : `${Number(service.cost).toLocaleString(
+          locale,
+          {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          },
+        )} ${service.currency || 'PLN'}`;
+
+  const schedule =
+    service.maintenanceSchedule;
+
+  const interval = [
+    schedule?.intervalKm != null
+      ? `${schedule.intervalKm.toLocaleString(
+          locale,
+        )} km`
+      : null,
+
+    schedule?.intervalMonths != null
+      ? `${schedule.intervalMonths} ${tr(
+          'months',
+          'мес.',
+        )}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' / ') || '—';
+
+  // --------------------------------------------------
+  // CONTENT
+  // --------------------------------------------------
+
+  return (
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* HERO */}
+
+      <ImageBackground
+        source={require(
+          '../../../assets/images/cars-hero.png'
+        )}
+        style={styles.hero}
+        imageStyle={styles.heroImage}
+        resizeMode="cover"
+      >
+        <View style={styles.navigation}>
+          <Pressable
+            style={styles.back}
+            onPress={() => router.back()}
+          >
+            <Ionicons
+              name="arrow-back"
+              size={24}
+              color={COLORS.navy}
+            />
+          </Pressable>
+
+          <Text style={styles.navigationTitle}>
+            {tr(
+              'Service Details',
+              'Детали обслуживания',
+            )}
+          </Text>
+
+          <Pressable
+            style={styles.editPill}
+            onPress={handleEdit}
+          >
+            <Text style={styles.editPillText}>
+              {tr('Edit', 'Изменить')}
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.heroTitleBox}>
+          <Text style={styles.heroTitle}>
             {service.title}
           </Text>
 
-          <Text style={styles.serviceDate}>
-            {formatDate(service.date)}
+          <Text style={styles.heroDate}>
+            {formatDate(
+              service.date,
+              locale,
+            )}
           </Text>
         </View>
+      </ImageBackground>
 
-        <View style={styles.heroSpacer} />
+      {/* SERVICE DETAILS */}
 
-        <View style={styles.contentArea}>
-          <View style={styles.detailsCard}>
-            <DetailRow
-              icon={
-                <Gauge
-                  size={20}
-                  color={COLORS.text}
-                />
-              }
-              label="Mileage"
-              value={`${formatNumber(
-                service.mileage,
-              )} km`}
-            />
+      <View style={styles.detailsCard}>
+        <DetailRow
+          icon="speedometer-outline"
+          label={tr('Mileage', 'Пробег')}
+          value={`${service.mileage.toLocaleString(
+            locale,
+          )} km`}
+        />
 
-            <DetailRow
-              icon={
-                <Coins
-                  size={20}
-                  color={COLORS.text}
-                />
-              }
-              label="Total cost"
-              value={costText}
-            />
+        <DetailRow
+          icon="wallet-outline"
+          label={tr(
+            'Total cost',
+            'Стоимость',
+          )}
+          value={cost}
+        />
 
-            <DetailRow
-              icon={
-                <MapPin
-                  size={20}
-                  color={COLORS.text}
-                />
-              }
-              label="Workshop"
-              value={
-                service.workshop?.trim() ||
-                'Not specified'
-              }
-            />
+        <DetailRow
+          icon="business-outline"
+          label={tr(
+            'Workshop',
+            'Автосервис',
+          )}
+          value={service.workshop || '—'}
+        />
 
-            <DetailRow
-              icon={
-                <FileText
-                  size={20}
-                  color={COLORS.text}
-                />
-              }
-              label="Description"
-              value={description}
-              vertical
-              last
-            />
-          </View>
+        <View style={styles.descriptionRow}>
+          <Ionicons
+            name="document-text-outline"
+            size={21}
+            color={COLORS.navy}
+          />
 
-          <View style={styles.documentsCard}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>
-                Photos & Documents
-              </Text>
+          <View style={styles.descriptionBody}>
+            <Text style={styles.rowLabel}>
+              {tr(
+                'Description',
+                'Описание',
+              )}
+            </Text>
 
-              <View style={styles.documentCount}>
-                <Text style={styles.documentCountText}>
-                  0
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.documentsRow}>
-              <View style={styles.emptyDocument}>
-                <FileText
-                  size={25}
-                  color="#9DBBD6"
-                />
-                <Text style={styles.emptyDocumentText}>
-                  No documents yet
-                </Text>
-              </View>
-
-              <View style={styles.addDocumentTile}>
-                <ImagePlus
-                  size={27}
-                  color="#A3C6E2"
-                />
-                <Text style={styles.addDocumentText}>
-                  Add
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.documentsHint}>
-              Document attachments are not yet enabled
-              for service records.
+            <Text style={styles.descriptionValue}>
+              {service.description ||
+                service.title}
             </Text>
           </View>
-
-          <Pressable
-            style={styles.vehicleCard}
-            onPress={() =>
-              router.push({
-                pathname: '/car/[id]',
-                params: {
-                  id: service.carId,
-                },
-              })
-            }
-          >
-            <View style={styles.vehicleIcon}>
-              <CarFront
-                size={23}
-                color={COLORS.text}
-              />
-            </View>
-
-            <View style={styles.vehicleContent}>
-              <Text style={styles.vehicleLabel}>
-                Vehicle
-              </Text>
-
-              <Text style={styles.vehicleName}>
-                {carName}
-                {car ? ` · ${car.year}` : ''}
-              </Text>
-            </View>
-
-            <ChevronRight
-              size={20}
-              color="#8AA7C2"
-            />
-          </Pressable>
-
-          <Pressable
-            style={styles.editButton}
-            onPress={openEdit}
-          >
-            <Pencil
-              size={19}
-              color={COLORS.navy}
-            />
-            <Text style={styles.editButtonText}>
-              Edit Service
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[
-              styles.deleteButton,
-              deleteMutation.isPending &&
-                styles.disabled,
-            ]}
-            onPress={handleDelete}
-            disabled={deleteMutation.isPending}
-          >
-            {deleteMutation.isPending ? (
-              <ActivityIndicator
-                color={COLORS.danger}
-              />
-            ) : (
-              <>
-                <Trash2
-                  size={18}
-                  color={COLORS.danger}
-                />
-                <Text style={styles.deleteButtonText}>
-                  Delete Service
-                </Text>
-              </>
-            )}
-          </Pressable>
         </View>
-      </>
-    );
-  };
+      </View>
 
-  return (
-    <View style={styles.screen}>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-        }}
-      />
+      {/* PHOTOS AND DOCUMENTS */}
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <ImageBackground
-          source={require('../../../assets/images/cars-hero.png')}
-          resizeMode="cover"
-          imageStyle={styles.heroImage}
-          style={[
-            styles.hero,
-            {
-              paddingTop: insets.top + 8,
-            },
-          ]}
-        >
-          <View style={styles.topbar}>
-            <Pressable
-              onPress={goBack}
-              style={styles.backButton}
-              hitSlop={10}
-              accessibilityLabel="Go back"
-            >
-              <ArrowLeft
-                size={24}
-                color={COLORS.navy}
-              />
-            </Pressable>
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>
+          {tr(
+            'Photos & Documents',
+            'Фото и документы',
+          )}
+        </Text>
 
-            <Text style={styles.topbarTitle}>
-              Service Details
-            </Text>
+        <View style={styles.documentRow}>
+          <View style={styles.documentTile}>
+            <Ionicons
+              name="document-text-outline"
+              size={32}
+              color={COLORS.muted}
+            />
+          </View>
 
-            <Pressable
-              onPress={openEdit}
-              disabled={!service}
+          <View style={styles.documentTile}>
+            <Ionicons
+              name="add"
+              size={32}
+              color="#A8C5DF"
+            />
+          </View>
+        </View>
+
+        <Text style={styles.helper}>
+          {tr(
+            'Attachments are not yet available for this service.',
+            'Вложения для этой записи пока недоступны.',
+          )}
+        </Text>
+      </View>
+
+      {/* MAINTENANCE REMINDER */}
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            {tr(
+              'Maintenance reminder',
+              'Напоминание о ТО',
+            )}
+          </Text>
+
+          <View
+            style={[
+              styles.status,
+              schedule?.enabled &&
+                styles.statusActive,
+            ]}
+          >
+            <Text
               style={[
-                styles.editPill,
-                !service && styles.disabled,
+                styles.statusText,
+                schedule?.enabled &&
+                  styles.statusTextActive,
               ]}
             >
-              <Text style={styles.editPillText}>
-                Edit
-              </Text>
-            </Pressable>
+              {schedule?.enabled
+                ? tr('Active', 'Активно')
+                : tr('Off', 'Выкл.')}
+            </Text>
           </View>
-
-          {service && (
-            <View style={styles.heroTitleCard}>
-              <Text style={styles.serviceTitle}>
-                {service.title}
-              </Text>
-              <Text style={styles.serviceDate}>
-                {formatDate(service.date)}
-              </Text>
-            </View>
-          )}
-        </ImageBackground>
-
-        <View style={styles.contentArea}>
-          {service ? (
-            <>
-              <View style={styles.detailsCard}>
-                <DetailRow
-                  icon={<Gauge size={20} color={COLORS.text} />}
-                  label="Mileage"
-                  value={`${formatNumber(service.mileage)} km`}
-                />
-                <DetailRow
-                  icon={<Coins size={20} color={COLORS.text} />}
-                  label="Total cost"
-                  value={costText}
-                />
-                <DetailRow
-                  icon={<MapPin size={20} color={COLORS.text} />}
-                  label="Workshop"
-                  value={service.workshop?.trim() || 'Not specified'}
-                />
-                <DetailRow
-                  icon={<FileText size={20} color={COLORS.text} />}
-                  label="Description"
-                  value={description}
-                  vertical
-                  last
-                />
-              </View>
-
-              <View style={styles.documentsCard}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>
-                    Photos & Documents
-                  </Text>
-                  <ChevronRight size={20} color="#8AA7C2" />
-                </View>
-
-                <View style={styles.documentsRow}>
-                  <View style={styles.emptyDocument}>
-                    <FileText size={26} color="#9DBBD6" />
-                    <Text style={styles.emptyDocumentText}>
-                      No documents yet
-                    </Text>
-                  </View>
-
-                  <View style={styles.addDocumentTile}>
-                    <ImagePlus size={28} color="#A3C6E2" />
-                    <Text style={styles.addDocumentText}>Add</Text>
-                  </View>
-                </View>
-
-                <Text style={styles.documentsHint}>
-                  Attachments will be available once document storage
-                  is connected to the backend.
-                </Text>
-              </View>
-
-              <Pressable
-                style={styles.vehicleCard}
-                onPress={() =>
-                  router.push({
-                    pathname: '/car/[id]',
-                    params: { id: service.carId },
-                  })
-                }
-              >
-                <View style={styles.vehicleIcon}>
-                  <CarFront size={23} color={COLORS.text} />
-                </View>
-                <View style={styles.vehicleContent}>
-                  <Text style={styles.vehicleLabel}>Vehicle</Text>
-                  <Text style={styles.vehicleName}>
-                    {carName}{car ? ` · ${car.year}` : ''}
-                  </Text>
-                </View>
-                <ChevronRight size={20} color="#8AA7C2" />
-              </Pressable>
-
-              <Pressable style={styles.editButton} onPress={openEdit}>
-                <Pencil size={19} color={COLORS.navy} />
-                <Text style={styles.editButtonText}>
-                  Edit Service
-                </Text>
-              </Pressable>
-
-              <Pressable
-                style={[
-                  styles.deleteButton,
-                  deleteMutation.isPending && styles.disabled,
-                ]}
-                onPress={handleDelete}
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending ? (
-                  <ActivityIndicator color={COLORS.danger} />
-                ) : (
-                  <>
-                    <Trash2 size={18} color={COLORS.danger} />
-                    <Text style={styles.deleteButtonText}>
-                      Delete Service
-                    </Text>
-                  </>
-                )}
-              </Pressable>
-            </>
-          ) : (
-            renderContent()
-          )}
         </View>
-      </ScrollView>
-    </View>
+
+        {schedule?.enabled ? (
+          <>
+            <DetailRow
+              icon="speedometer-outline"
+              label={tr(
+                'Next mileage',
+                'Следующий пробег',
+              )}
+              value={
+                schedule.nextDueMileage == null
+                  ? '—'
+                  : `${schedule.nextDueMileage.toLocaleString(
+                      locale,
+                    )} km`
+              }
+            />
+
+            <DetailRow
+              icon="calendar-outline"
+              label={tr(
+                'Next date',
+                'Следующая дата',
+              )}
+              value={formatDate(
+                schedule.nextDueDate,
+                locale,
+              )}
+            />
+
+            <DetailRow
+              icon="repeat-outline"
+              label={tr(
+                'Interval',
+                'Интервал',
+              )}
+              value={interval}
+              last
+            />
+          </>
+        ) : (
+          <Text style={styles.helper}>
+            {tr(
+              'No active reminder for this service.',
+              'Для этого обслуживания нет активного напоминания.',
+            )}
+          </Text>
+        )}
+
+        <Pressable
+          style={styles.scheduleButton}
+          onPress={handleEdit}
+        >
+          <Text style={styles.scheduleButtonText}>
+            {tr(
+              'Edit service and schedule',
+              'Изменить обслуживание и график',
+            )}
+          </Text>
+
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color={COLORS.navy}
+          />
+        </Pressable>
+      </View>
+
+      {/* VEHICLE LINK */}
+
+      {carQuery.data && (
+        <Pressable
+          style={styles.carLink}
+          onPress={openCar}
+        >
+          <Ionicons
+            name="car-sport-outline"
+            size={22}
+            color={COLORS.navy}
+          />
+
+          <Text style={styles.carLinkText}>
+            {carQuery.data.make}{' '}
+            {carQuery.data.model}
+          </Text>
+
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color={COLORS.blue}
+          />
+        </Pressable>
+      )}
+
+      {/* DELETE */}
+
+      <Pressable
+        style={styles.deleteButton}
+        disabled={deleteMutation.isPending}
+        onPress={handleDelete}
+      >
+        <Ionicons
+          name="trash-outline"
+          size={18}
+          color={COLORS.red}
+        />
+
+        <Text style={styles.deleteText}>
+          {deleteMutation.isPending
+            ? tr(
+                'Deleting...',
+                'Удаление...',
+              )
+            : tr(
+                'Delete service',
+                'Удалить обслуживание',
+              )}
+        </Text>
+      </Pressable>
+    </ScrollView>
   );
 }
+
+// --------------------------------------------------
+// STYLES
+// --------------------------------------------------
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#F5FAFF',
+    backgroundColor: COLORS.background,
   },
-  scroll: {
+
+  content: {
+    paddingBottom: 44,
+  },
+
+  center: {
     flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 45,
-  },
-  hero: {
-    height: 295,
-    backgroundColor: COLORS.sky,
-    overflow: 'hidden',
-  },
-  heroImage: {
-    width: '100%',
-    height: '100%',
-  },
-  topbar: {
-    height: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-  topbarTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.navy,
-  },
-  editPill: {
-    minWidth: 56,
-    height: 34,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    backgroundColor: '#CDE9FB',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 24,
+    gap: 16,
+    backgroundColor: COLORS.background,
   },
-  editPillText: {
-    fontSize: 14,
+
+  link: {
+    color: '#247DD0',
     fontWeight: '700',
-    color: COLORS.navy,
   },
-  heroTitleCard: {
-    marginHorizontal: 24,
-    marginTop: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.89)',
-    alignSelf: 'stretch',
-  },
-  serviceTitle: {
-    fontSize: 21,
-    lineHeight: 27,
-    fontWeight: '800',
-    color: COLORS.navy,
-  },
-  serviceDate: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.muted,
-    marginTop: 7,
-  },
-  heroSpacer: {
-    height: 65,
-  },
-  contentArea: {
-    marginTop: -19,
-    borderTopLeftRadius: 27,
-    borderTopRightRadius: 27,
-    backgroundColor: '#F7FBFF',
-    paddingHorizontal: 23,
-    paddingTop: 19,
-    paddingBottom: 30,
-    minHeight: 450,
-  },
-  detailsCard: {
-    paddingHorizontal: 17,
-    paddingVertical: 4,
-    backgroundColor: COLORS.white,
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: '#EDF3F9',
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 53,
-    gap: 12,
-  },
-  detailBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  detailIcon: {
-    width: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  detailContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  detailLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.muted,
-  },
-  detailValue: {
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: '800',
-    color: COLORS.navy,
-    textAlign: 'right',
-    lineHeight: 19,
-  },
-  verticalRow: {
-    alignItems: 'flex-start',
-    paddingTop: 14,
-    paddingBottom: 15,
-  },
-  verticalContent: {
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: 6,
-  },
-  descriptionValue: {
-    textAlign: 'left',
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 20,
-    color: COLORS.text,
-  },
-  documentsCard: {
-    marginTop: 16,
-    padding: 15,
-    borderRadius: 20,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: '#EDF3F9',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 13,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: COLORS.navy,
-  },
-  documentCount: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#EAF5FE',
-    borderRadius: 9,
-  },
-  documentCountText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.muted,
-  },
-  documentsRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  emptyDocument: {
-    width: 112,
-    height: 95,
-    borderRadius: 13,
-    backgroundColor: '#EDF6FE',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-  },
-  emptyDocumentText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.muted,
+
+  error: {
+    color: COLORS.red,
     textAlign: 'center',
   },
-  addDocumentTile: {
-    width: 85,
-    height: 95,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: '#DFEBF6',
-    backgroundColor: '#F7FBFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+
+  // HERO
+
+  hero: {
+    height: 290,
+    paddingTop: 52,
+    paddingHorizontal: 22,
+    justifyContent: 'space-between',
+    overflow: 'hidden',
   },
-  addDocumentText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.muted,
+
+  heroImage: {
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
   },
-  documentsHint: {
-    fontSize: 11,
-    lineHeight: 17,
-    color: COLORS.muted,
-    marginTop: 12,
-  },
-  vehicleCard: {
+
+  navigation: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginTop: 16,
-    padding: 15,
-    borderRadius: 18,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: '#EDF3F9',
+    justifyContent: 'space-between',
   },
-  vehicleIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 13,
-    backgroundColor: '#E8F4FC',
-    alignItems: 'center',
+
+  back: {
+    width: 40,
+    height: 40,
     justifyContent: 'center',
   },
-  vehicleContent: {
-    flex: 1,
-    gap: 4,
-  },
-  vehicleLabel: {
-    fontSize: 12,
-    color: COLORS.muted,
-  },
-  vehicleName: {
-    fontSize: 14,
+
+  navigationTitle: {
+    fontSize: 17,
     fontWeight: '800',
     color: COLORS.navy,
   },
-  editButton: {
-    height: 54,
-    marginTop: 24,
+
+  editPill: {
+    backgroundColor: '#D5EFFF',
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+
+  editPillText: {
+    color: COLORS.navy,
+    fontWeight: '600',
+  },
+
+  heroTitleBox: {
+    backgroundColor: 'rgba(255,255,255,0.85)',
     borderRadius: 17,
-    backgroundColor: COLORS.yellow,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 9,
+    padding: 15,
+    marginBottom: 67,
   },
-  editButtonText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.navy,
-  },
-  deleteButton: {
-    height: 48,
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  deleteButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.danger,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  loading: {
-    paddingVertical: 60,
-    alignItems: 'center',
-    gap: 14,
-  },
-  loadingText: {
-    color: COLORS.muted,
-    fontSize: 14,
-  },
-  stateContainer: {
-    padding: 24,
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    alignItems: 'center',
-    gap: 12,
-  },
-  stateIcon: {
-    width: 62,
-    height: 62,
-    borderRadius: 20,
-    backgroundColor: '#E8F4FC',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stateTitle: {
+
+  heroTitle: {
     fontSize: 20,
     fontWeight: '800',
     color: COLORS.navy,
-    textAlign: 'center',
   },
-  stateDescription: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: COLORS.muted,
-    textAlign: 'center',
+
+  heroDate: {
+    fontSize: 15,
+    color: COLORS.blue,
+    marginTop: 7,
   },
-  stateButton: {
-    backgroundColor: COLORS.yellow,
-    paddingHorizontal: 24,
-    paddingVertical: 13,
-    borderRadius: 14,
-    marginTop: 6,
+
+  // DETAILS
+
+  detailsCard: {
+    marginHorizontal: 14,
+    marginTop: -24,
+    borderRadius: 23,
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  stateButtonText: {
-    fontWeight: '800',
+
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 58,
+    gap: 12,
+  },
+
+  divider: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+  },
+
+  rowIcon: {
+    width: 24,
+  },
+
+  rowBody: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  rowLabel: {
+    color: COLORS.blue,
+    fontSize: 13,
+  },
+
+  rowValue: {
     color: COLORS.navy,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+    flexShrink: 1,
+  },
+
+  descriptionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 16,
+  },
+
+  descriptionBody: {
+    flex: 1,
+    gap: 7,
+  },
+
+  descriptionValue: {
+    color: COLORS.navy,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  // SECTION CARDS
+
+  sectionCard: {
+    marginHorizontal: 14,
+    marginTop: 14,
+    padding: 17,
+    borderRadius: 21,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: '#E5EEF6',
+  },
+
+  sectionTitle: {
+    color: COLORS.navy,
+    fontWeight: '800',
+    fontSize: 15,
+  },
+
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+
+  // DOCUMENTS
+
+  documentRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 15,
+  },
+
+  documentTile: {
+    width: 76,
+    height: 86,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: '#F3F9FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  helper: {
+    color: COLORS.blue,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 12,
+  },
+
+  // MAINTENANCE
+
+  status: {
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 11,
+    backgroundColor: '#F1F3F6',
+  },
+
+  statusActive: {
+    backgroundColor: '#DCF7E8',
+  },
+
+  statusText: {
+    color: COLORS.blue,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  statusTextActive: {
+    color: COLORS.green,
+  },
+
+  scheduleButton: {
+    backgroundColor: COLORS.lightBlue,
+    padding: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+
+  scheduleButtonText: {
+    fontSize: 13,
+    color: COLORS.navy,
+    fontWeight: '700',
+    flex: 1,
+  },
+
+  // VEHICLE LINK
+
+  carLink: {
+    marginHorizontal: 14,
+    marginTop: 14,
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  carLinkText: {
+    flex: 1,
+    color: COLORS.navy,
+    fontWeight: '700',
+  },
+
+  // DELETE
+
+  deleteButton: {
+    alignSelf: 'center',
+    marginTop: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+  },
+
+  deleteText: {
+    color: COLORS.red,
+    fontWeight: '700',
   },
 });

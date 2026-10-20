@@ -36,7 +36,7 @@ import {
     type AppLanguage,
 } from '@/i18n';
 
-const COLORS = {
+const C = {
   navy: '#102C4B',
   muted: '#7793AF',
   sky: '#DDF2FF',
@@ -46,7 +46,7 @@ const COLORS = {
   yellow: '#FFD23F',
 };
 
-type InfoPanel = 'settings' | 'help' | null;
+type Panel = 'settings' | 'help' | null;
 
 type MenuItemProps = {
   title: string;
@@ -67,31 +67,31 @@ function MenuItem({
       accessibilityRole="button"
       style={({ pressed }) => [
         styles.menuItem,
-        pressed && styles.menuItemPressed,
+        pressed && styles.menuPressed,
       ]}
     >
-      <View style={styles.iconContainer}>
+      <View style={styles.iconBox}>
         <Icon
           size={22}
-          strokeWidth={2.1}
-          color={COLORS.navy}
+          strokeWidth={2}
+          color={C.navy}
         />
       </View>
 
       <View
         style={[
-          styles.menuItemContent,
+          styles.menuContent,
           last && styles.lastItem,
         ]}
       >
-        <Text style={styles.menuItemText}>
+        <Text style={styles.menuText}>
           {title}
         </Text>
 
         <ChevronRight
           size={21}
-          strokeWidth={2}
           color="#A9BED3"
+          strokeWidth={2}
         />
       </View>
     </Pressable>
@@ -126,17 +126,17 @@ function LanguageOption({
       }}
       style={({ pressed }) => [
         styles.languageOption,
-        selected && styles.languageOptionSelected,
-        pressed && styles.languageOptionPressed,
+        selected && styles.languageSelected,
+        pressed && { opacity: 0.8 },
       ]}
     >
-      <View style={styles.flagContainer}>
+      <View style={styles.flagBox}>
         <Text style={styles.flag}>
           {language === 'en' ? '🇬🇧' : '🇷🇺'}
         </Text>
       </View>
 
-      <View style={styles.languageTextContainer}>
+      <View style={styles.languageText}>
         <Text style={styles.languageTitle}>
           {title}
         </Text>
@@ -148,15 +148,15 @@ function LanguageOption({
 
       <View
         style={[
-          styles.radioCircle,
-          selected && styles.radioCircleSelected,
+          styles.radio,
+          selected && styles.radioSelected,
         ]}
       >
         {selected && (
           <Check
             size={14}
             strokeWidth={3}
-            color={COLORS.white}
+            color={C.white}
           />
         )}
       </View>
@@ -167,9 +167,9 @@ function LanguageOption({
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const { openProfile } = useProfileMenu();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
 
-  const [panel, setPanel] = useState<InfoPanel>(null);
+  const [panel, setPanel] = useState<Panel>(null);
   const [savingLanguage, setSavingLanguage] =
     useState(false);
 
@@ -181,7 +181,7 @@ export default function MoreScreen() {
     }
   };
 
-  const handleLanguageChange = async (
+  const changeLanguage = async (
     language: AppLanguage,
   ) => {
     if (
@@ -203,7 +203,7 @@ export default function MoreScreen() {
 
       Alert.alert(
         'Language',
-        'Could not save your language preference. Please try again.',
+        'Could not save your language preference.',
       );
     } finally {
       setSavingLanguage(false);
@@ -213,9 +213,7 @@ export default function MoreScreen() {
   return (
     <View style={styles.screen}>
       <Stack.Screen
-        options={{
-          headerShown: false,
-        }}
+        options={{ headerShown: false }}
       />
 
       <ImageBackground
@@ -224,8 +222,10 @@ export default function MoreScreen() {
         )}
         style={styles.background}
         resizeMode="cover"
+        blurRadius={18}
       >
         <ScrollView
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scrollContent,
             {
@@ -233,7 +233,6 @@ export default function MoreScreen() {
               paddingBottom: insets.bottom + 30,
             },
           ]}
-          showsVerticalScrollIndicator={false}
         >
           <Text style={styles.title}>
             {t('more.title')}
@@ -274,11 +273,10 @@ export default function MoreScreen() {
         animationType="fade"
         onRequestClose={closePanel}
       >
-        <View style={styles.modalOverlay}>
+        <View style={styles.overlay}>
           <Pressable
             style={StyleSheet.absoluteFill}
             onPress={closePanel}
-            accessibilityLabel={t('common.close')}
             disabled={savingLanguage}
           />
 
@@ -286,23 +284,16 @@ export default function MoreScreen() {
             <Pressable
               style={styles.closeButton}
               onPress={closePanel}
-              accessibilityLabel={t('common.close')}
               disabled={savingLanguage}
             >
-              <X size={20} color={COLORS.navy} />
+              <X size={20} color={C.navy} />
             </Pressable>
 
             <View style={styles.modalIcon}>
               {panel === 'settings' ? (
-                <Settings
-                  size={28}
-                  color={COLORS.blue}
-                />
+                <Settings size={28} color={C.blue} />
               ) : (
-                <CircleHelp
-                  size={28}
-                  color={COLORS.blue}
-                />
+                <CircleHelp size={28} color={C.blue} />
               )}
             </View>
 
@@ -319,29 +310,20 @@ export default function MoreScreen() {
                 </Text>
 
                 <View style={styles.sectionHeader}>
-                  <Globe2
-                    size={17}
-                    color={COLORS.blue}
-                  />
-
+                  <Globe2 size={18} color={C.blue} />
                   <Text style={styles.sectionLabel}>
                     {t('settings.appLanguage')}
                   </Text>
                 </View>
 
-                <View
-                  style={styles.languageList}
-                  accessibilityRole="radiogroup"
-                >
+                <View style={styles.languageList}>
                   <LanguageOption
                     language="en"
                     title="English"
                     subtitle={t('settings.english')}
                     selected={currentLanguage === 'en'}
                     disabled={savingLanguage}
-                    onPress={() =>
-                      handleLanguageChange('en')
-                    }
+                    onPress={() => changeLanguage('en')}
                   />
 
                   <LanguageOption
@@ -350,16 +332,13 @@ export default function MoreScreen() {
                     subtitle={t('settings.russian')}
                     selected={currentLanguage === 'ru'}
                     disabled={savingLanguage}
-                    onPress={() =>
-                      handleLanguageChange('ru')
-                    }
+                    onPress={() => changeLanguage('ru')}
                   />
                 </View>
 
                 {savingLanguage ? (
                   <ActivityIndicator
-                    size="small"
-                    color={COLORS.blue}
+                    color={C.blue}
                     style={styles.saveIndicator}
                   />
                 ) : (
@@ -377,7 +356,7 @@ export default function MoreScreen() {
             <Pressable
               style={[
                 styles.modalButton,
-                savingLanguage && styles.buttonDisabled,
+                savingLanguage && { opacity: 0.6 },
               ]}
               onPress={closePanel}
               disabled={savingLanguage}
@@ -396,91 +375,77 @@ export default function MoreScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.sky,
+    backgroundColor: C.sky,
   },
-
   background: {
     flex: 1,
     width: '100%',
     height: '100%',
   },
-
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 18,
   },
-
   title: {
     fontSize: 30,
     fontWeight: '800',
     letterSpacing: -0.9,
-    color: COLORS.navy,
+    color: C.navy,
     marginBottom: 17,
     marginLeft: 2,
   },
-
   menuCard: {
     backgroundColor: 'rgba(255,255,255,0.94)',
     borderRadius: 19,
     overflow: 'hidden',
   },
-
   menuItem: {
-    minHeight: 55,
-    paddingLeft: 13,
+    minHeight: 58,
+    paddingLeft: 15,
     flexDirection: 'row',
     alignItems: 'center',
   },
-
-  menuItemPressed: {
+  menuPressed: {
     backgroundColor: '#EFF7FD',
   },
-
-  iconContainer: {
-    width: 36,
-    alignItems: 'flex-start',
+  iconBox: {
+    width: 39,
     justifyContent: 'center',
   },
-
-  menuItemContent: {
+  menuContent: {
     flex: 1,
-    minHeight: 55,
+    minHeight: 58,
     paddingRight: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: COLORS.divider,
+    borderBottomColor: C.divider,
   },
-
   lastItem: {
     borderBottomWidth: 0,
   },
-
-  menuItemText: {
+  menuText: {
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    color: COLORS.navy,
+    color: C.navy,
   },
-
-  modalOverlay: {
+  overlay: {
     flex: 1,
     backgroundColor: 'rgba(9,39,71,0.4)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
-
   modalCard: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: COLORS.white,
+    backgroundColor: C.white,
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',
   },
-
   closeButton: {
     position: 'absolute',
     top: 15,
@@ -491,7 +456,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 1,
   },
-
   modalIcon: {
     width: 62,
     height: 62,
@@ -502,26 +466,22 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 17,
   },
-
   modalTitle: {
     fontSize: 21,
     fontWeight: '800',
-    color: COLORS.navy,
+    color: C.navy,
     textAlign: 'center',
   },
-
   modalDescription: {
     marginTop: 11,
     fontSize: 14,
     lineHeight: 21,
-    color: COLORS.muted,
+    color: C.muted,
     textAlign: 'center',
   },
-
   settingsContent: {
     width: '100%',
   },
-
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -529,40 +489,31 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 12,
   },
-
   sectionLabel: {
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.6,
-    color: COLORS.muted,
+    color: C.muted,
   },
-
   languageList: {
     width: '100%',
     gap: 10,
   },
-
   languageOption: {
     minHeight: 72,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: COLORS.divider,
-    backgroundColor: COLORS.white,
+    borderColor: C.divider,
+    backgroundColor: C.white,
     paddingHorizontal: 13,
     flexDirection: 'row',
     alignItems: 'center',
   },
-
-  languageOptionSelected: {
-    borderColor: COLORS.blue,
+  languageSelected: {
+    borderColor: C.blue,
     backgroundColor: '#F0F8FF',
   },
-
-  languageOptionPressed: {
-    opacity: 0.8,
-  },
-
-  flagContainer: {
+  flagBox: {
     width: 46,
     height: 46,
     borderRadius: 13,
@@ -571,28 +522,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-
   flag: {
     fontSize: 25,
   },
-
-  languageTextContainer: {
+  languageText: {
     flex: 1,
   },
-
   languageTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: COLORS.navy,
+    color: C.navy,
   },
-
   languageSubtitle: {
     marginTop: 3,
     fontSize: 12,
-    color: COLORS.muted,
+    color: C.muted,
   },
-
-  radioCircle: {
+  radio: {
     width: 23,
     height: 23,
     borderRadius: 12,
@@ -601,41 +547,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  radioCircleSelected: {
-    borderColor: COLORS.blue,
-    backgroundColor: COLORS.blue,
+  radioSelected: {
+    borderColor: C.blue,
+    backgroundColor: C.blue,
   },
-
   settingsHint: {
     marginTop: 16,
     textAlign: 'center',
     fontSize: 12,
     lineHeight: 18,
-    color: COLORS.muted,
+    color: C.muted,
   },
-
   saveIndicator: {
     marginTop: 16,
   },
-
   modalButton: {
     width: '100%',
     height: 49,
     borderRadius: 15,
-    backgroundColor: COLORS.yellow,
+    backgroundColor: C.yellow,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 23,
   },
-
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-
   modalButtonText: {
     fontSize: 15,
     fontWeight: '800',
-    color: COLORS.navy,
+    color: C.navy,
   },
 });

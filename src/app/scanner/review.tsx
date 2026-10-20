@@ -1,11 +1,13 @@
-
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    KeyboardAvoidingView,
+    Platform,
     Pressable,
+    ScrollView,
     StyleSheet,
     Text,
     View,
@@ -341,54 +343,66 @@ export default function ScannerReviewScreen() {
   }
 
   return (
-    <View style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.title}>
-          Review service details
-        </Text>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator
+        nestedScrollEnabled
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>
+            Review service details
+          </Text>
 
-        <Text style={styles.description}>
-          Check the recognized values and correct
-          anything that is missing or inaccurate.
-          Nothing is saved until you confirm.
-        </Text>
-      </View>
+          <Text style={styles.description}>
+            Check the recognized values and correct
+            anything that is missing or inaccurate.
+            Nothing is saved until you confirm.
+          </Text>
+        </View>
 
-      <View style={styles.carCard}>
-        <Text style={styles.carLabel}>
-          SERVICE FOR
-        </Text>
+        <View style={styles.carCard}>
+          <Text style={styles.carLabel}>
+            SERVICE FOR
+          </Text>
 
-        <Text style={styles.carName}>
-          {car.make} {car.model} ({car.year})
-        </Text>
+          <Text style={styles.carName}>
+            {car.make} {car.model} ({car.year})
+          </Text>
 
-        <Text style={styles.carMileage}>
-          Current mileage:{' '}
-          {car.mileage.toLocaleString()} km
-        </Text>
-      </View>
+          <Text style={styles.carMileage}>
+            Current mileage:{' '}
+            {car.mileage.toLocaleString()} km
+          </Text>
+        </View>
 
-      <ServiceForm
-        key={`${car.id}:${uri}`}
-        defaultValues={defaultValues}
-        submitLabel={
-          createService.isPending
-            ? 'Saving service...'
-            : 'Confirm and save service'
-        }
-        onSubmit={handleSubmit}
-      />
+        <ServiceForm
+          key={`${car.id}:${uri}`}
+          defaultValues={defaultValues}
+          submitLabel={
+            createService.isPending
+              ? 'Saving service...'
+              : 'Confirm and save service'
+          }
+          onSubmit={handleSubmit}
+        />
 
-      {uri ? (
-        <Text style={styles.documentNote}>
-          The scanned document was used to
-          extract these values. The image itself
-          is not yet uploaded or attached to
-          the PostgreSQL service record.
-        </Text>
-      ) : null}
-    </View>
+        {uri ? (
+          <Text style={styles.documentNote}>
+            The scanned document was used to
+            extract these values. The image itself
+            is not yet uploaded or attached to
+            the PostgreSQL service record.
+          </Text>
+        ) : null}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -396,7 +410,17 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#F5F6F8',
-    padding: 20,
+  },
+
+  scroll: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 100,
   },
 
   header: {

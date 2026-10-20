@@ -5,12 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useAuth } from '../../auth/AuthContext';
-import { useProfileMenu } from '../../components/ProfileMenuContext';
-
 import {
     AlertCircle,
-    Bell,
     CalendarClock,
     CarFront,
     CheckCircle2,
@@ -18,18 +14,14 @@ import {
     ClipboardList,
     FileText,
     Gauge,
-    LogOut,
     Plus,
-    UserRound,
     Wrench,
-    X,
 } from 'lucide-react-native';
 
 import {
     Animated,
     Image,
     ImageBackground,
-    Modal,
     Pressable,
     StyleSheet,
     Text,
@@ -38,33 +30,32 @@ import {
 
 import { api } from '../../../lib/api';
 import { useCarMaintenanceSchedules } from '../../../lib/maintenance.queries';
+import { useAuth } from '../../auth/AuthContext';
+import { useProfileMenu } from '../../components/ProfileMenuContext';
 import { useCars } from '../../features/cars/hooks/useCars';
+
 import {
     formatMaintenanceDeadline,
     getMaintenanceName,
 } from '../../features/maintenance/utils/maintenance-display';
+
 import { calculateMaintenanceOverview } from '../../features/maintenance/utils/maintenance-overview';
 import { findNextMaintenance } from '../../features/maintenance/utils/next-maintenance';
 import { useCarStore } from '../../store/car.store';
 
-const COLORS = {
-  navy: '#092747',
-  blue: '#1476C8',
-  muted: '#5E7B99',
+const C = {
+  navy: '#102C4B',
+  blue: '#1789E8',
+  muted: '#7793AF',
   sky: '#DDF2FF',
   white: '#FFFFFF',
-  yellow: '#FFCC32',
-  border: '#E0EDF6',
+  yellow: '#FFD23F',
+  border: '#E7EFF6',
   red: '#D75A4C',
-  amber: '#D39B10',
   green: '#218C83',
 };
 
 const HEADER_HEIGHT = 64;
-
-// -----------------------------------
-// TYPES
-// -----------------------------------
 
 interface ApiService {
   id: string;
@@ -78,10 +69,6 @@ interface ApiService {
   workshop?: string | null;
 }
 
-// -----------------------------------
-// API
-// -----------------------------------
-
 async function fetchCarServices(
   carId: string,
 ): Promise<ApiService[]> {
@@ -92,31 +79,88 @@ async function fetchCarServices(
   return response.data;
 }
 
-// -----------------------------------
-// HOME SCREEN
-// -----------------------------------
+function SectionHeader({
+  title,
+  action,
+  onPress,
+}: {
+  title: string;
+  action?: string;
+  onPress?: () => void;
+}) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>
+        {title}
+      </Text>
+
+      {action && onPress && (
+        <Pressable
+          onPress={onPress}
+          style={styles.sectionAction}
+        >
+          <Text style={styles.sectionLink}>
+            {action}
+          </Text>
+
+          <ChevronRight
+            size={16}
+            color={C.navy}
+          />
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+function StatCard({
+  icon: Icon,
+  value,
+  label,
+  onPress,
+}: {
+  icon: typeof Gauge;
+  value: string;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={styles.statCard}
+      onPress={onPress}
+    >
+      <View style={styles.statIcon}>
+        <Icon
+          size={21}
+          color={C.navy}
+          strokeWidth={1.8}
+        />
+      </View>
+
+      <Text
+        style={styles.statValue}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {value}
+      </Text>
+
+      <Text
+        style={styles.statLabel}
+        numberOfLines={2}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 export default function HomeScreen() {
   const { t } = useTranslation();
-  // -----------------------------------
-  // SAFE AREA
-  // -----------------------------------
-
   const insets = useSafeAreaInsets();
 
-  const topInset = insets.top;
-  const totalHeaderHeight = topInset + HEADER_HEIGHT;
-
-  // -----------------------------------
-  // AUTHENTICATION
-  // -----------------------------------
-
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { openProfile } = useProfileMenu();
-
-  // -----------------------------------
-  // TELEGRAM AVATAR
-  // -----------------------------------
 
   const [avatarError, setAvatarError] = useState(false);
 
@@ -126,10 +170,6 @@ export default function HomeScreen() {
     setAvatarError(false);
   }, [photoUrl]);
 
-  const showAvatar = Boolean(
-    photoUrl && !avatarError,
-  );
-
   const initials = (
     [user?.firstName?.[0], user?.lastName?.[0]]
       .filter(Boolean)
@@ -138,131 +178,74 @@ export default function HomeScreen() {
     'U'
   ).toUpperCase();
 
-  const displayName =
-    [user?.firstName, user?.lastName]
-      .filter(Boolean)
-      .join(' ') ||
-    user?.username ||
-    t('profile.title');
-
-  // -----------------------------------
-  // PROFILE MENU
-  // -----------------------------------
-
-  const [profileVisible, setProfileVisible] =
-    useState(false);
-
-  const closeProfile = () => {
-    setProfileVisible(false);
-  };
-
-  const openMore = () => {
-    closeProfile();
-    router.push('/(tabs)/more');
-  };
-
-  const openTelegramSettings = () => {
-    closeProfile();
-    router.push('/(tabs)/more');
-  };
-
-  const handleLogout = async () => {
-    closeProfile();
-
-    try {
-      await logout();
-      router.replace('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
-  };
-
-  // -----------------------------------
-  // ANIMATED HEADER
-  // -----------------------------------
-
   const scrollY = useRef(
     new Animated.Value(0),
   ).current;
 
-  const headerBackgroundColor = scrollY.interpolate({
+  const headerBackground = scrollY.interpolate({
     inputRange: [0, 100],
     outputRange: [
-      'rgba(255,204,50,0)',
-      'rgba(255,204,50,1)',
+      'rgba(221,242,255,0)',
+      'rgba(221,242,255,0.97)',
     ],
     extrapolate: 'clamp',
   });
 
-  // -----------------------------------
   // CARS
-  // -----------------------------------
 
   const {
     data: cars = [],
-    isLoading: isLoadingCars,
-    isError: isCarsError,
+    isLoading: loadingCars,
+    isError: carsError,
     refetch: refetchCars,
   } = useCars();
 
-  const storedSelectedCarId = useCarStore(
+  const selectedCarId = useCarStore(
     (state) => state.selectedCarId,
   );
 
   const selectedCar =
-    cars.find(
-      (car) => car.id === storedSelectedCarId,
-    ) ??
+    cars.find((car) => car.id === selectedCarId) ??
     cars.find((car) => car.isPrimary) ??
     cars[0] ??
     null;
 
-  const selectedCarId = selectedCar?.id;
+  const carId = selectedCar?.id;
 
-  // -----------------------------------
   // SERVICES
-  // -----------------------------------
 
   const {
     data: services = [],
-    isLoading: isLoadingServices,
-    isError: isServicesError,
+    isLoading: loadingServices,
+    isError: servicesError,
     refetch: refetchServices,
   } = useQuery({
-    queryKey: [
-      'cars',
-      selectedCarId,
-      'services',
-    ],
-    queryFn: () =>
-      fetchCarServices(selectedCarId!),
-    enabled: Boolean(selectedCarId),
+    queryKey: ['cars', carId, 'services'],
+    enabled: Boolean(carId),
+    queryFn: () => fetchCarServices(carId!),
   });
 
-  // -----------------------------------
   // MAINTENANCE
-  // -----------------------------------
 
   const {
-    data: maintenanceSchedules = [],
-    isLoading: isLoadingMaintenance,
-    isError: isMaintenanceError,
-  } = useCarMaintenanceSchedules(
-    selectedCarId ?? '',
-  );
+    data: schedules = [],
+    isLoading: loadingMaintenance,
+    isError: maintenanceError,
+  } = useCarMaintenanceSchedules(carId ?? '');
 
   const maintenanceOverview =
     calculateMaintenanceOverview(
-      maintenanceSchedules,
+      schedules,
       selectedCar?.mileage ?? 0,
     );
 
-  const maintenanceCounts =
-    maintenanceOverview.counts;
+  const attentionCount =
+    maintenanceOverview.counts.overdue +
+    maintenanceOverview.counts.dueSoon;
 
   const nextMaintenance = selectedCar
     ? findNextMaintenance(
-        maintenanceSchedules,
+        schedules,
         selectedCar.mileage,
       )
     : null;
@@ -275,29 +258,22 @@ export default function HomeScreen() {
     )
     .slice(0, 3);
 
-  const maintenanceAttentionCount =
-    maintenanceCounts.dueSoon +
-    maintenanceCounts.overdue;
-
-  // -----------------------------------
   // NAVIGATION
-  // -----------------------------------
 
-  const openSelectedCar = () => {
-    if (selectedCarId) {
-      router.push({
-        pathname: '/car/[id]',
-        params: {
-          id: selectedCarId,
-        },
-      });
-    } else {
+  const openCar = () => {
+    if (!carId) {
       router.push('/(tabs)/cars');
+      return;
     }
+
+    router.push({
+      pathname: '/car/[id]',
+      params: { id: carId },
+    });
   };
 
-  const openNextMaintenance = () => {
-    if (!selectedCarId) {
+  const openMaintenance = () => {
+    if (!carId) {
       router.push('/(tabs)/cars');
       return;
     }
@@ -307,68 +283,48 @@ export default function HomeScreen() {
         pathname: '/maintenance/[id]',
         params: {
           id: nextMaintenance.schedule.id,
-          carId: selectedCarId,
+          carId,
         },
       });
       return;
     }
 
-    router.push({
-      pathname: '/car/[id]',
-      params: {
-        id: selectedCarId,
-      },
-    });
+    openCar();
   };
 
-  const handleAddService = () => {
-    if (!selectedCarId) {
+  const addService = () => {
+    if (!carId) {
       router.push('/(tabs)/cars');
       return;
     }
 
     router.push({
       pathname: '/service/new',
-      params: {
-        vehicleId: selectedCarId,
-      },
+      params: { vehicleId: carId },
     });
   };
 
-  // -----------------------------------
-  // DISPLAY VALUES
-  // -----------------------------------
-
-  const nextServiceTitle = !selectedCar
+  const maintenanceTitle = !selectedCar
     ? t('home.noCar')
-    : isLoadingMaintenance
+    : loadingMaintenance
       ? t('home.loadingMaintenance')
-      : isMaintenanceError
+      : maintenanceError
         ? t('home.maintenanceUnavailable')
         : nextMaintenance
-          ? getMaintenanceName(
-              nextMaintenance.schedule,
-            )
+          ? getMaintenanceName(nextMaintenance.schedule)
           : t('home.notConfigured');
 
-  const nextServiceDescription = !selectedCar
+  const maintenanceDescription = !selectedCar
     ? t('home.selectCar')
-    : isLoadingMaintenance
+    : loadingMaintenance
       ? t('home.checkingSchedules')
-      : isMaintenanceError
+      : maintenanceError
         ? t('home.maintenanceError')
         : nextMaintenance
           ? formatMaintenanceDeadline(
               nextMaintenance.result,
             )
           : t('home.setupMaintenance');
-
-  const nextServiceStatus =
-    nextMaintenance?.result.label ?? null;
-
-  // -----------------------------------
-  // RENDER
-  // -----------------------------------
 
   return (
     <ImageBackground
@@ -377,53 +333,51 @@ export default function HomeScreen() {
       )}
       style={styles.screen}
       resizeMode="cover"
-      blurRadius={7}
+      blurRadius={18}
     >
-      {/* SCROLLABLE CONTENT */}
-
       <Animated.ScrollView
-        onScroll={Animated.event(
-          [
-            {
-              nativeEvent: {
-                contentOffset: {
-                  y: scrollY,
-                },
-              },
-            },
-          ],
-          {
-            useNativeDriver: false,
-          },
-        )}
-        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{
+            nativeEvent: {
+              contentOffset: { y: scrollY },
+            },
+          }],
+          { useNativeDriver: false },
+        )}
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: totalHeaderHeight + 20,
+            paddingTop:
+              insets.top + HEADER_HEIGHT + 18,
+            paddingBottom: insets.bottom + 100,
           },
         ]}
       >
-        {/* VEHICLE CARD */}
+        {/* VEHICLE */}
+
+        <SectionHeader
+          title={t('home.vehicleOverview')}
+          action={t('home.seeAll')}
+          onPress={() => router.push('/(tabs)/cars')}
+        />
 
         <Pressable
           style={styles.vehicleCard}
-          onPress={openSelectedCar}
+          onPress={openCar}
         >
-          <View style={styles.vehicleCardTop}>
-            <View style={styles.vehicleBadge}>
+          <View style={styles.vehicleHeader}>
+            <View style={styles.vehicleIcon}>
               <CarFront
-                size={25}
-                color={COLORS.blue}
-                strokeWidth={2}
+                size={23}
+                color={C.navy}
               />
             </View>
 
-            <View style={styles.vehicleDetails}>
+            <View style={styles.vehicleInfo}>
               <Text style={styles.vehicleName}>
-                {isLoadingCars
+                {loadingCars
                   ? t('home.loadingCar')
                   : selectedCar
                     ? `${selectedCar.make} ${selectedCar.model}`
@@ -443,512 +397,299 @@ export default function HomeScreen() {
 
             <ChevronRight
               size={21}
-              color={COLORS.muted}
+              color={C.muted}
             />
           </View>
 
-          {selectedCar && (
-            <Image
-              source={require(
-                '../../../assets/images/lovablecar-background.png'
-              )}
-              style={styles.vehicleIllustration}
-              resizeMode="cover"
-            />
-          )}
+          <Image
+            source={require(
+              '../../../assets/images/lovablecar-background.png'
+            )}
+            style={styles.vehicleImage}
+            resizeMode="cover"
+          />
 
-          <View style={styles.vehicleCardFooter}>
+          <View style={styles.vehicleFooter}>
             <View style={styles.vehicleFooterLeft}>
-              <CheckCircle2
-                size={14}
-                color={COLORS.green}
-                strokeWidth={2.2}
-              />
-
-              <Text style={styles.vehicleFooterText}>
-                {t('home.vehicleOverview')}
-              </Text>
+              {selectedCar?.isPrimary && (
+                <>
+                  <CheckCircle2
+                    size={16}
+                    color={C.green}
+                  />
+                  <Text style={styles.primaryText}>
+                    {t('cars.primary')}
+                  </Text>
+                </>
+              )}
             </View>
 
             <View style={styles.vehicleFooterRight}>
-              <Text style={styles.vehicleFooterLink}>
+              <Text style={styles.detailsText}>
                 {t('home.viewDetails')}
               </Text>
-
               <ChevronRight
-                size={15}
-                color={COLORS.blue}
+                size={16}
+                color={C.navy}
               />
             </View>
           </View>
         </Pressable>
 
-        {/* ERROR */}
-
-        {isCarsError && (
+        {carsError && (
           <Pressable
             style={styles.errorCard}
-            onPress={() =>
-              void refetchCars()
-            }
+            onPress={() => void refetchCars()}
           >
-            <AlertCircle
-              size={17}
-              color="#B91C1C"
-            />
-
+            <AlertCircle size={18} color={C.red} />
             <Text style={styles.errorText}>
-                {t('home.carsError')}
-              </Text>
+              {t('home.carsError')}
+            </Text>
           </Pressable>
         )}
 
         {/* STATISTICS */}
 
         <View style={styles.statsRow}>
-          <Pressable
-            style={styles.statCard}
-            onPress={openSelectedCar}
-          >
-            <View style={styles.statIconBlue}>
-              <Gauge
-                size={20}
-                color={COLORS.blue}
-              />
-            </View>
-
-            <Text
-              style={styles.statValue}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-            >
-              {selectedCar
+          <StatCard
+            icon={Gauge}
+            value={
+              selectedCar
                 ? selectedCar.mileage.toLocaleString()
-                : '—'}
-            </Text>
+                : '—'
+            }
+            label={t('cars.mileage') + ' (km)'}
+            onPress={openCar}
+          />
 
-            <Text style={styles.statLabel}>
-                {t('cars.mileage')}
-              </Text>
-
-            <Text style={styles.statUnit}>
-              km
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.statCard}
+          <StatCard
+            icon={ClipboardList}
+            value={
+              loadingServices
+                ? '—'
+                : String(services.length)
+            }
+            label={t('navigation.services')}
             onPress={() =>
               router.push('/(tabs)/services')
             }
-          >
-            <View style={styles.statIconBlue}>
-              <ClipboardList
-                size={20}
-                color={COLORS.blue}
-              />
-            </View>
+          />
 
-            <Text style={styles.statValue}>
-              {services.length}
-            </Text>
-
-            <Text style={styles.statLabel}>
-                {t('navigation.services')}
-              </Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.statCard}
-            onPress={openNextMaintenance}
-          >
-            <View style={styles.statIconYellow}>
-              <CalendarClock
-                size={20}
-                color={COLORS.navy}
-              />
-            </View>
-
-            <Text style={styles.statValue}>
-              {maintenanceAttentionCount}
-            </Text>
-
-            <Text style={styles.statLabel}>
-                {t('home.attention')}
-              </Text>
-          </Pressable>
+          <StatCard
+            icon={CalendarClock}
+            value={
+              loadingMaintenance || maintenanceError
+                ? '—'
+                : String(attentionCount)
+            }
+            label={t('home.attention')}
+            onPress={openMaintenance}
+          />
         </View>
 
         {/* UPCOMING SERVICE */}
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-                {t('home.upcomingService')}
-              </Text>
-
-          <Pressable onPress={openSelectedCar}>
-            <Text style={styles.sectionLink}>
-                {t('home.seeAll')}
-              </Text>
-          </Pressable>
-        </View>
+        <SectionHeader
+          title={t('home.upcomingService')}
+          action={t('home.seeAll')}
+          onPress={openCar}
+        />
 
         <Pressable
           style={styles.maintenanceCard}
-          onPress={openNextMaintenance}
+          onPress={openMaintenance}
         >
           <View style={styles.maintenanceIcon}>
             <Wrench
               size={24}
-              color={COLORS.navy}
+              color={C.navy}
             />
           </View>
 
           <View style={styles.maintenanceInfo}>
             <Text style={styles.maintenanceTitle}>
-              {nextServiceTitle}
+              {maintenanceTitle}
             </Text>
 
-            <Text style={styles.maintenanceSubtitle}>
-              {nextServiceDescription}
+            <Text style={styles.maintenanceDescription}>
+              {maintenanceDescription}
             </Text>
 
-            {nextServiceStatus && (
-              <Text style={styles.maintenanceStatus}>
-                {nextServiceStatus}
-              </Text>
+            {nextMaintenance?.result.label && (
+              <View style={styles.statusPill}>
+                <Text style={styles.statusText}>
+                  {nextMaintenance.result.label}
+                </Text>
+              </View>
             )}
           </View>
 
           <ChevronRight
             size={20}
-            color={COLORS.muted}
+            color={C.muted}
           />
         </Pressable>
 
         {/* RECENT SERVICES */}
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-                {t('home.recentServices')}
-              </Text>
+        <SectionHeader
+          title={t('home.recentServices')}
+          action={t('home.seeAll')}
+          onPress={() =>
+            router.push('/(tabs)/services')
+          }
+        />
 
-          <Pressable
-            onPress={() =>
-              router.push('/(tabs)/services')
-            }
-          >
-            <Text style={styles.sectionLink}>
-                {t('home.seeAll')}
-              </Text>
-          </Pressable>
-        </View>
-
-        {recentServices.map((service) => (
-          <Pressable
-            key={service.id}
-            style={styles.serviceCard}
-            onPress={() =>
-              router.push({
-                pathname: '/service/[id]',
-                params: {
-                  id: service.id,
-                },
-              })
-            }
-          >
-            <View style={styles.serviceIcon}>
-              <Wrench
-                size={20}
-                color={COLORS.blue}
-              />
-            </View>
-
-            <View style={styles.serviceInfo}>
-              <Text style={styles.serviceTitle}>
-                {service.title}
-              </Text>
-
-              <Text style={styles.serviceSubtitle}>
-                {new Date(
-                  service.date,
-                ).toLocaleDateString()}
-                {' · '}
-                {service.mileage.toLocaleString()} km
-              </Text>
-            </View>
-
-            <ChevronRight
-              size={18}
-              color={COLORS.muted}
-            />
-          </Pressable>
-        ))}
-
-        {recentServices.length === 0 && (
-          <View style={styles.emptyServices}>
-            <FileText
-              size={24}
-              color={COLORS.muted}
-            />
-
-            <Text style={styles.emptyText}>
-              {isLoadingServices
-                ? t('home.loadingServices')
-                : isServicesError
-                  ? t('home.servicesUnavailable')
-                  : t('home.noServices')}
-            </Text>
-
-            {isServicesError && (
+        <View style={styles.servicesCard}>
+          {recentServices.length > 0 ? (
+            recentServices.map((service, index) => (
               <Pressable
-                onPress={() =>
-                  void refetchServices()
-                }
+                key={service.id}
+                style={[
+                  styles.serviceRow,
+                  index < recentServices.length - 1 &&
+                    styles.serviceDivider,
+                ]}
+                onPress={() => {
+                  router.push({
+                    pathname: '/service/[id]',
+                    params: {
+                      id: service.id,
+                      serviceId: service.id,
+                      carId: service.carId || carId,
+                    },
+                  });
+                }}
               >
-                <Text style={styles.sectionLink}>
-                {t('common.retry')}
-              </Text>
+                <View style={styles.serviceIcon}>
+                  <Wrench
+                    size={21}
+                    color={C.navy}
+                  />
+                </View>
+
+                <View style={styles.serviceInfo}>
+                  <Text
+                    style={styles.serviceTitle}
+                    numberOfLines={2}
+                  >
+                    {service.title}
+                  </Text>
+
+                  <Text style={styles.serviceSubtitle}>
+                    {new Date(
+                      service.date,
+                    ).toLocaleDateString()}
+                    {' · '}
+                    {service.mileage.toLocaleString()} km
+                  </Text>
+                </View>
+
+                <ChevronRight
+                  size={19}
+                  color={C.muted}
+                />
               </Pressable>
-            )}
-          </View>
-        )}
+            ))
+          ) : (
+            <View style={styles.emptyServices}>
+              <FileText
+                size={30}
+                color={C.muted}
+              />
+
+              <Text style={styles.emptyText}>
+                {loadingServices
+                  ? t('home.loadingServices')
+                  : servicesError
+                    ? t('home.servicesUnavailable')
+                    : t('home.noServices')}
+              </Text>
+
+              {servicesError && (
+                <Pressable
+                  onPress={() =>
+                    void refetchServices()
+                  }
+                >
+                  <Text style={styles.retryText}>
+                    {t('common.retry')}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+        </View>
 
         {/* ADD SERVICE */}
 
         <Pressable
-          style={styles.addServiceButton}
-          onPress={handleAddService}
+          style={styles.addButton}
+          onPress={addService}
         >
           <Plus
-            size={21}
-            color={COLORS.navy}
+            size={22}
+            color={C.navy}
+            strokeWidth={2.5}
           />
 
-          <Text style={styles.addServiceText}>
-                {t('services.addService')}
-              </Text>
+          <Text style={styles.addButtonText}>
+            {t('services.addService')}
+          </Text>
         </Pressable>
       </Animated.ScrollView>
 
-      {/* FIXED ANIMATED HEADER */}
+      {/* FIXED HEADER */}
 
       <Animated.View
         style={[
-          styles.animatedHeader,
+          styles.header,
           {
-            height: totalHeaderHeight,
-            paddingTop: topInset,
-            backgroundColor: headerBackgroundColor,
+            height: insets.top + HEADER_HEIGHT,
+            paddingTop: insets.top,
+            backgroundColor: headerBackground,
           },
         ]}
       >
-        <Text
-          style={styles.headerTitle}
-          numberOfLines={1}
-        >
+        <Text style={styles.headerTitle}>
           LovableCar
         </Text>
 
         <Pressable
           onPress={openProfile}
-          style={styles.headerAction}
+          style={styles.avatarButton}
           accessibilityRole="button"
           accessibilityLabel={t('home.openProfile')}
         >
-          {showAvatar ? (
+          {photoUrl && !avatarError ? (
             <Image
-              source={{ uri: photoUrl! }}
-              style={styles.profileAvatar}
-              onError={() => {
-                setAvatarError(true);
-              }}
+              source={{ uri: photoUrl }}
+              style={styles.avatar}
+              onError={() => setAvatarError(true)}
             />
           ) : (
-            <View style={styles.profileAvatarFallback}>
-              <Text style={styles.profileInitials}>
+            <View style={styles.avatarFallback}>
+              <Text style={styles.avatarText}>
                 {initials}
               </Text>
             </View>
           )}
         </Pressable>
       </Animated.View>
-
-      {/* PROFILE POPUP */}
-
-      <Modal
-        visible={profileVisible}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={closeProfile}
-      >
-        <Pressable
-          style={[
-            styles.modalOverlay,
-            {
-              paddingTop:
-                topInset + HEADER_HEIGHT + 8,
-            },
-          ]}
-          onPress={closeProfile}
-        >
-          <Pressable
-            style={styles.profilePopup}
-            onPress={(event) =>
-              event.stopPropagation()
-            }
-          >
-            {/* PROFILE HEADER */}
-
-            <View style={styles.popupHeader}>
-              <View style={styles.popupUserRow}>
-                {showAvatar ? (
-                  <Image
-                    source={{ uri: photoUrl! }}
-                    style={styles.popupAvatar}
-                    onError={() => {
-                      setAvatarError(true);
-                    }}
-                  />
-                ) : (
-                  <View
-                    style={styles.popupAvatarFallback}
-                  >
-                    <Text style={styles.popupInitials}>
-                      {initials}
-                    </Text>
-                  </View>
-                )}
-
-                <View style={styles.popupUserInfo}>
-                  <Text
-                    style={styles.popupUserName}
-                    numberOfLines={1}
-                  >
-                    {displayName}
-                  </Text>
-
-                  {user?.username && (
-                    <Text
-                      style={styles.popupUsername}
-                      numberOfLines={1}
-                    >
-                      @{user.username}
-                    </Text>
-                  )}
-                </View>
-
-                <Pressable
-                  onPress={closeProfile}
-                  style={styles.popupCloseButton}
-                >
-                  <X
-                    size={20}
-                    color={COLORS.muted}
-                  />
-                </Pressable>
-              </View>
-            </View>
-
-            <View style={styles.popupDivider} />
-
-            {/* MY PROFILE */}
-
-            <Pressable
-              style={styles.popupItem}
-              onPress={openMore}
-            >
-              <UserRound
-                size={20}
-                color={COLORS.navy}
-              />
-
-              <Text style={styles.popupItemText}>
-                {t('profile.title')}
-              </Text>
-
-              <ChevronRight
-                size={18}
-                color={COLORS.muted}
-              />
-            </Pressable>
-
-            {/* TELEGRAM NOTIFICATIONS */}
-
-            <Pressable
-              style={styles.popupItem}
-              onPress={openTelegramSettings}
-            >
-              <Bell
-                size={20}
-                color={COLORS.navy}
-              />
-
-              <Text style={styles.popupItemText}>
-                {t('more.telegramNotifications')}
-              </Text>
-
-              <ChevronRight
-                size={18}
-                color={COLORS.muted}
-              />
-            </Pressable>
-
-            <View style={styles.popupDivider} />
-
-            {/* LOGOUT */}
-
-            <Pressable
-              style={styles.popupItem}
-              onPress={() =>
-                void handleLogout()
-              }
-            >
-              <LogOut
-                size={20}
-                color={COLORS.red}
-              />
-
-              <Text
-                style={[
-                  styles.popupItemText,
-                  {
-                    color: COLORS.red,
-                  },
-                ]}
-              >
-                {t('profile.logout')}
-              </Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </ImageBackground>
   );
 }
 
-// -----------------------------------
-// STYLES
-// -----------------------------------
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.sky,
     width: '100%',
+    backgroundColor: C.sky,
   },
-
   content: {
-    paddingHorizontal: 16,
-    paddingBottom: 40,
+    paddingHorizontal: 18,
   },
-
-  // -----------------------------------
-  // ANIMATED HEADER
-  // -----------------------------------
-
-  animatedHeader: {
+  header: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -957,432 +698,299 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    zIndex: 100,
-    elevation: 10,
+    zIndex: 20,
   },
-
   headerTitle: {
-    flexShrink: 1,
-    color: COLORS.navy,
-    fontSize: 24,
+    fontSize: 25,
     fontWeight: '800',
+    letterSpacing: -0.7,
+    color: C.navy,
   },
-
-  headerAction: {
+  avatarButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
+    alignItems: 'center',
   },
-
-  // -----------------------------------
-  // PROFILE AVATAR
-  // -----------------------------------
-
-  profileAvatar: {
+  avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: COLORS.white,
+    borderColor: C.white,
   },
-
-  profileAvatarFallback: {
+  avatarFallback: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: COLORS.white,
-    alignItems: 'center',
+    backgroundColor: C.white,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-
-  profileInitials: {
+  avatarText: {
     fontSize: 16,
     fontWeight: '800',
-    color: COLORS.navy,
+    color: C.navy,
   },
-
-  // -----------------------------------
-  // PROFILE MODAL
-  // -----------------------------------
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(9,39,71,0.25)',
-    alignItems: 'flex-end',
-    justifyContent: 'flex-start',
-    paddingHorizontal: 16,
-  },
-
-  profilePopup: {
-    width: 300,
-    maxWidth: '100%',
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    paddingVertical: 12,
-    shadowColor: COLORS.navy,
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-
-  popupHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-
-  popupUserRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-
-  popupUserInfo: {
-    flex: 1,
-  },
-
-  popupAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-
-  popupAvatarFallback: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#E6F3FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  popupInitials: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.navy,
-  },
-
-  popupUserName: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.navy,
-  },
-
-  popupUsername: {
-    marginTop: 3,
-    fontSize: 12,
-    color: COLORS.muted,
-  },
-
-  popupCloseButton: {
-    padding: 4,
-  },
-
-  popupDivider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 8,
-  },
-
-  popupItem: {
-    minHeight: 48,
-    paddingHorizontal: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-
-  popupItemText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.navy,
-  },
-
-  // -----------------------------------
-  // VEHICLE CARD
-  // -----------------------------------
-
-  vehicleCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-
-  vehicleCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    gap: 12,
-  },
-
-  vehicleBadge: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    borderWidth: 2,
-    borderColor: COLORS.blue,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  vehicleDetails: {
-    flex: 1,
-  },
-
-  vehicleName: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.navy,
-  },
-
-  vehicleSubtitle: {
-    fontSize: 13,
-    color: COLORS.muted,
-    marginTop: 4,
-  },
-
-  vehicleIllustration: {
-    width: '100%',
-    height: 160,
-  },
-
-  vehicleCardFooter: {
-    paddingHorizontal: 16,
-    paddingVertical: 13,
+  sectionHeader: {
+    marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-
+  sectionTitle: {
+    flex: 1,
+    fontSize: 19,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    color: C.navy,
+  },
+  sectionAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 8,
+    paddingLeft: 8,
+  },
+  sectionLink: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.navy,
+  },
+  vehicleCard: {
+    backgroundColor: C.white,
+    borderRadius: 22,
+    overflow: 'hidden',
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  vehicleHeader: {
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  vehicleIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    backgroundColor: '#EAF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vehicleInfo: {
+    flex: 1,
+  },
+  vehicleName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.navy,
+  },
+  vehicleSubtitle: {
+    fontSize: 13,
+    color: C.muted,
+    marginTop: 4,
+  },
+  vehicleImage: {
+    width: '100%',
+    height: 155,
+  },
+  vehicleFooter: {
+    minHeight: 52,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   vehicleFooterLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
   },
-
+  primaryText: {
+    color: C.green,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   vehicleFooterRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
   },
-
-  vehicleFooterText: {
+  detailsText: {
     fontSize: 12,
-    color: COLORS.green,
-  },
-
-  vehicleFooterLink: {
-    fontSize: 12,
-    color: COLORS.blue,
     fontWeight: '700',
+    color: C.navy,
   },
-
-
-  errorCard: {
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#FEE2E2',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 16,
-  },
-
-  errorText: {
-    color: '#B91C1C',
-    fontSize: 13,
-  },
-
-
   statsRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 28,
+    gap: 9,
+    marginBottom: 27,
   },
-
   statCard: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 12,
-    alignItems: 'center',
-    minHeight: 110,
-  },
-
-  statIconBlue: {
-    width: 36,
-    height: 36,
+    backgroundColor: C.white,
     borderRadius: 18,
-    backgroundColor: '#E6F3FF',
+    paddingHorizontal: 8,
+    paddingVertical: 15,
     alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: C.border,
+    minHeight: 126,
   },
-
-  statIconYellow: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFF1BE',
+  statIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: '#EAF6FF',
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'center',
   },
-
   statValue: {
+    marginTop: 11,
     fontSize: 19,
     fontWeight: '800',
-    color: COLORS.navy,
-    marginTop: 8,
+    color: C.navy,
   },
-
   statLabel: {
-    fontSize: 12,
-    color: COLORS.muted,
-    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 15,
+    color: C.muted,
+    textAlign: 'center',
+    marginTop: 5,
   },
-
-  statUnit: {
-    fontSize: 10,
-    color: COLORS.muted,
-  },
-
-
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.navy,
-  },
-
-  sectionLink: {
-    fontSize: 13,
-    color: '#000000',
-    fontWeight: '600',
-  },
-
-
   maintenanceCard: {
-    backgroundColor: '#FFF6DC',
-    borderRadius: 16,
-    padding: 15,
+    backgroundColor: C.white,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 28,
-    borderWidth: 1,
-    borderColor: '#FFE4A2',
+    marginBottom: 27,
   },
-
   maintenanceIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.yellow,
+    width: 49,
+    height: 49,
+    borderRadius: 16,
+    backgroundColor: '#FFF0B8',
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   maintenanceInfo: {
     flex: 1,
   },
-
   maintenanceTitle: {
     fontSize: 15,
     fontWeight: '800',
-    color: COLORS.navy,
+    color: C.navy,
   },
-
-  maintenanceSubtitle: {
-    fontSize: 12,
-    color: COLORS.muted,
+  maintenanceDescription: {
     marginTop: 5,
+    fontSize: 12,
+    lineHeight: 18,
+    color: C.muted,
   },
-
-  maintenanceStatus: {
+  statusPill: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: '#FFF0B8',
+  },
+  statusText: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.amber,
-    marginTop: 6,
+    color: C.navy,
   },
-
-
-  serviceCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    padding: 14,
+  servicesCard: {
+    backgroundColor: C.white,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 14,
+    overflow: 'hidden',
+  },
+  serviceRow: {
+    minHeight: 78,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 8,
+    paddingVertical: 12,
   },
-
+  serviceDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
   serviceIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#E8F4FF',
+    width: 43,
+    height: 43,
+    borderRadius: 14,
+    backgroundColor: '#EAF6FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   serviceInfo: {
     flex: 1,
   },
-
   serviceTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: COLORS.navy,
+    color: C.navy,
   },
-
   serviceSubtitle: {
     fontSize: 12,
-    color: COLORS.muted,
-    marginTop: 5,
+    color: C.muted,
+    marginTop: 6,
   },
-
   emptyServices: {
-    padding: 24,
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
+    padding: 26,
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
   },
-
   emptyText: {
-    color: COLORS.muted,
     fontSize: 13,
+    color: C.muted,
+    textAlign: 'center',
   },
-
-
-  addServiceButton: {
-    marginTop: 20,
-    height: 54,
-    backgroundColor: COLORS.yellow,
-    borderRadius: 16,
+  retryText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.blue,
+  },
+  addButton: {
+    marginTop: 22,
+    minHeight: 56,
+    borderRadius: 24,
+    backgroundColor: C.yellow,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
   },
-
-  addServiceText: {
-    color: COLORS.navy,
+  addButtonText: {
     fontSize: 16,
     fontWeight: '800',
+    color: C.navy,
+  },
+  errorCard: {
+    backgroundColor: '#FFF0EF',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  errorText: {
+    fontSize: 13,
+    color: C.red,
+    flex: 1,
   },
 });

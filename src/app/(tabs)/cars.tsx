@@ -1,961 +1,118 @@
-
 import { router } from 'expo-router';
-
-import {
-    ImageBackground,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
-} from 'react-native';
-
+import { ArrowUpRight, CalendarClock, CarFront, Check, ChevronRight, CircleAlert, Gauge, Plus, ShieldCheck } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
+import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import {
-    ArrowRight,
-    CalendarClock,
-    CarFront,
-    Check,
-    ChevronRight,
-    CircleAlert,
-    Gauge,
-    Plus,
-    ShieldCheck,
-} from 'lucide-react-native';
-
 import { useCarMaintenanceSchedules } from '../../../lib/maintenance.queries';
-
 import { useCars } from '../../features/cars/hooks/useCars';
-
 import { calculateMaintenanceOverview } from '../../features/maintenance/utils/maintenance-overview';
-
 import { useCarStore } from '../../store/car.store';
 
-// -----------------------------------
-// COLORS
-// -----------------------------------
+const C = { navy: '#092747', muted: '#617C9B', blue: '#1686D4', sky: '#E8F6FF', yellow: '#FFD443', border: '#E1EDF6', green: '#168E69', red: '#D35454', white: '#FFFFFF' };
 
-const COLORS = {
-  navy: '#092747',
-  blue: '#1476C8',
-  muted: '#5E7B99',
-  sky: '#DDF2FF',
-  white: '#FFFFFF',
-  yellow: '#FFCC32',
-  border: '#E0EDF6',
-  green: '#218C83',
-  red: '#D75A4C',
-  amber: '#C58B16',
-};
+function MaintenanceStatus({ carId, mileage }: { carId: string; mileage: number }) {
+  const { t } = useTranslation();
+  const { data = [], isLoading, isError, refetch } = useCarMaintenanceSchedules(carId);
 
-// -----------------------------------
-// MAINTENANCE SUMMARY
-// -----------------------------------
-
-type MaintenanceSummaryProps = {
-  carId: string;
-  mileage: number;
-};
-
-function MaintenanceSummary({
-  carId,
-  mileage,
-}: MaintenanceSummaryProps) {
-  const {
-    data: schedules = [],
-    isLoading,
-    isError,
-    refetch,
-  } = useCarMaintenanceSchedules(carId);
-
-  if (isLoading) {
-    return (
-      <View style={styles.maintenanceRow}>
-        <CalendarClock
-          size={16}
-          color={COLORS.muted}
-        />
-        <Text style={styles.maintenanceMuted}>
-          Checking maintenance...
-        </Text>
-      </View>
-    );
-  }
-
-  if (isError) {
-    return (
-      <Pressable
-        style={styles.maintenanceRow}
-        onPress={(event) => {
-          event.stopPropagation();
-          void refetch();
-        }}
-      >
-        <CircleAlert
-          size={16}
-          color={COLORS.red}
-        />
-        <Text style={styles.maintenanceError}>
-          Maintenance unavailable · Retry
-        </Text>
-      </Pressable>
-    );
-  }
-
-  const overview = calculateMaintenanceOverview(
-    schedules,
-    mileage,
-  );
-
-  const { counts } = overview;
-
-  if (counts.overdue > 0) {
-    return (
-      <View style={styles.maintenanceRow}>
-        <CircleAlert
-          size={16}
-          color={COLORS.red}
-        />
-        <Text style={styles.maintenanceDanger}>
-          {counts.overdue} overdue maintenance
-          {counts.overdue === 1 ? ' item' : ' items'}
-        </Text>
-      </View>
-    );
-  }
-
-  if (counts.dueSoon > 0) {
-    return (
-      <View style={styles.maintenanceRow}>
-        <CalendarClock
-          size={16}
-          color={COLORS.amber}
-        />
-        <Text style={styles.maintenanceWarning}>
-          {counts.dueSoon} upcoming maintenance
-          {counts.dueSoon === 1 ? ' item' : ' items'}
-        </Text>
-      </View>
-    );
-  }
-
-  if (counts.configured > 0) {
-    return (
-      <View style={styles.maintenanceRow}>
-        <ShieldCheck
-          size={16}
-          color={COLORS.green}
-        />
-        <Text style={styles.maintenanceSuccess}>
-          Maintenance up to date
-        </Text>
-        {counts.unconfigured > 0 && (
-          <Text style={styles.maintenanceMuted}>
-            · {counts.unconfigured} not configured
-          </Text>
-        )}
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.maintenanceRow}>
-      <CalendarClock
-        size={16}
-        color={COLORS.muted}
-      />
-      <Text style={styles.maintenanceMuted}>
-        Set up maintenance reminders
-      </Text>
-      <ChevronRight
-        size={15}
-        color={COLORS.muted}
-      />
-    </View>
-  );
+  if (isLoading) return <Text style={s.statusText}>{t('cars.checkingMaintenance', { defaultValue: 'Checking maintenance...' })}</Text>;
+  if (isError) return <Pressable onPress={(e) => { e.stopPropagation(); void refetch(); }} style={s.statusRow}><CircleAlert size={15} color={C.red} /><Text style={[s.statusText, { color: C.red }]}>Maintenance unavailable · Retry</Text></Pressable>;
+  const { counts } = calculateMaintenanceOverview(data, mileage);
+  const overdue = counts.overdue > 0;
+  const soon = counts.dueSoon > 0;
+  const configured = counts.configured > 0;
+  const color = overdue ? C.red : soon ? '#B88218' : configured ? C.green : C.muted;
+  const message = overdue ? `${counts.overdue} overdue maintenance items` : soon ? `${counts.dueSoon} upcoming maintenance items` : configured ? t('cars.maintenanceUpToDate', { defaultValue: 'Maintenance up to date' }) : t('cars.setupReminders', { defaultValue: 'Set up maintenance reminders' });
+  return <View style={s.statusRow}>{configured && !overdue && !soon ? <ShieldCheck size={16} color={color} /> : <CalendarClock size={16} color={color} />}<Text style={[s.statusText, { color }]}>{message}</Text></View>;
 }
-
-// -----------------------------------
-// CARS SCREEN
-// -----------------------------------
 
 export default function CarsScreen() {
   const insets = useSafeAreaInsets();
+  const { t, i18n } = useTranslation();
+  const { data: cars = [], isLoading, isError, refetch } = useCars();
+  const selectedId = useCarStore((state) => state.selectedCarId);
+  const selectCar = useCarStore((state) => state.selectCar);
+  const currentId = cars.some((c) => c.id === selectedId) ? selectedId : cars.find((c) => c.isPrimary)?.id ?? cars[0]?.id;
+  const openCar = (id: string) => { selectCar(id); router.push({ pathname: '/car/[id]', params: { id } }); };
+  const addCar = () => router.push('/car/new');
+  const mileage = (n: number) => n.toLocaleString(i18n.resolvedLanguage === 'ru' ? 'ru-RU' : 'en-US');
 
-  const {
-    data: cars = [],
-    isLoading,
-    isError,
-    refetch,
-  } = useCars();
-
-  const storedSelectedCarId = useCarStore(
-    (state) => state.selectedCarId,
-  );
-
-  const selectCar = useCarStore(
-    (state) => state.selectCar,
-  );
-
-  const selectedCarExists = cars.some(
-    (car) => car.id === storedSelectedCarId,
-  );
-
-  const selectedCarId = selectedCarExists
-    ? storedSelectedCarId
-    : cars.find((car) => car.isPrimary)?.id ??
-      cars[0]?.id ??
-      null;
-
-  const handleSelectCar = (carId: string) => {
-    selectCar(carId);
-
-    router.push({
-      pathname: '/car/[id]',
-      params: {
-        id: carId,
-      },
-    });
-  };
-
-  const handleAddCar = () => {
-    router.push('/car/new');
-  };
-
-  return (
-    <ImageBackground
-      source={require(
-        '../../../assets/images/lovablecar-main-background.png'
-      )}
-      style={styles.container}
-      resizeMode="cover"
-      blurRadius={7}
-    >
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: insets.top + 24,
-            paddingBottom: Math.max(
-              insets.bottom,
-              20,
-            ) + 24,
-          },
-        ]}
-      >
-        {/* HEADER */}
-
-        <View style={styles.header}>
-          <View style={styles.headerInfo}>
-            <Text style={styles.title}>
-              My cars
-            </Text>
-
-            <Text style={styles.subtitle}>
-              Your garage, all in one place
-            </Text>
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.addSmallButton,
-              pressed && styles.pressedButton,
-            ]}
-            onPress={handleAddCar}
-            accessibilityRole="button"
-            accessibilityLabel="Add car"
-          >
-            <Plus
-              size={26}
-              color={COLORS.navy}
-              strokeWidth={2.5}
-            />
-          </Pressable>
+  return <View style={s.screen}>
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) + 105 }}>
+      <ImageBackground source={require('../../../assets/images/cars-hero.png')} resizeMode="cover" style={[s.hero, { paddingTop: insets.top + 20 }]}>
+        <View style={s.heroHeader}>
+          <View><Text style={s.heading}>{t('cars.title', { defaultValue: 'My Cars' })}</Text><Text style={s.heroSubtitle}>Your garage, all in one place</Text></View>
+          <Pressable onPress={addCar} style={s.heroAdd}><Plus size={23} color={C.navy} strokeWidth={2.5} /></Pressable>
         </View>
-
-        {/* GARAGE OVERVIEW */}
-
-        {!isLoading && !isError && cars.length > 0 && (
-          <View style={styles.garageSummary}>
-            <View style={styles.garageSummaryIcon}>
-              <CarFront
-                size={17}
-                color={COLORS.blue}
-              />
-            </View>
-
-            <Text style={styles.garageSummaryText}>
-              {cars.length}{' '}
-              {cars.length === 1 ? 'vehicle' : 'vehicles'}{' '}
-              in your garage
-            </Text>
-
-            <View style={styles.garageSummaryDot} />
-
-            <Text style={styles.garageSummaryRight}>
-              Overview
-            </Text>
-          </View>
-        )}
-
-        {/* LOADING */}
-
-        {isLoading && (
-          <Text style={styles.statusText}>
-            Loading cars...
-          </Text>
-        )}
-
-        {/* ERROR */}
-
-        {isError && (
-          <Pressable
-            style={styles.errorCard}
-            onPress={() => void refetch()}
-          >
-            <CircleAlert
-              size={18}
-              color={COLORS.red}
-            />
-            <Text style={styles.errorText}>
-              Could not load cars. Tap to retry.
-            </Text>
-          </Pressable>
-        )}
-
-        {/* EMPTY STATE */}
-
-        {!isLoading &&
-          !isError &&
-          cars.length === 0 && (
-            <View style={styles.emptyCard}>
-              <View style={styles.emptyIcon}>
-                <CarFront
-                  size={34}
-                  color={COLORS.blue}
-                />
-              </View>
-
-              <Text style={styles.emptyTitle}>
-                Your garage is empty
-              </Text>
-
-              <Text style={styles.emptyDescription}>
-                Add your first car to track mileage,
-                services, and maintenance.
-              </Text>
-
-              <Pressable
-                style={styles.emptyAddButton}
-                onPress={handleAddCar}
-              >
-                <Plus
-                  size={18}
-                  color={COLORS.navy}
-                />
-                <Text style={styles.emptyAddText}>
-                  Add your first car
-                </Text>
-              </Pressable>
-            </View>
-          )}
-
-        {/* VEHICLE CARDS */}
-
+        <View style={s.heroBottom}><CarFront size={18} color={C.navy} /><Text style={s.heroCount}>{cars.length} {cars.length === 1 ? 'vehicle' : 'vehicles'} in your garage</Text></View>
+      </ImageBackground>
+      <View style={s.body}>
+        <View style={s.sectionHeading}><Text style={s.sectionTitle}>Your vehicles</Text><Text style={s.sectionCount}>{cars.length} total</Text></View>
+        {isLoading && <Text style={s.feedback}>{t('cars.loadingCars', { defaultValue: 'Loading cars...' })}</Text>}
+        {isError && <Pressable style={s.empty} onPress={() => void refetch()}><CircleAlert size={26} color={C.red} /><Text style={s.emptyTitle}>Could not load cars</Text><Text style={s.emptyCaption}>Tap to retry</Text></Pressable>}
+        {!isLoading && !isError && cars.length === 0 && <View style={s.empty}><CarFront size={42} color={C.blue} /><Text style={s.emptyTitle}>Your garage is empty</Text><Text style={s.emptyCaption}>Add a vehicle to track services, mileage and maintenance.</Text><Pressable style={s.primaryButton} onPress={addCar}><Plus size={18} color={C.navy} /><Text style={s.primaryButtonText}>Add your first car</Text></Pressable></View>}
         {cars.map((car) => {
-          const isSelected =
-            car.id === selectedCarId;
-
-          return (
-            <Pressable
-              key={car.id}
-              style={({ pressed }) => [
-                styles.carCard,
-                isSelected && styles.selectedCarCard,
-                pressed && styles.pressedCard,
-              ]}
-              onPress={() =>
-                handleSelectCar(car.id)
-              }
-            >
-              {/* CARD HEADER */}
-
-              <View style={styles.cardTop}>
-                <View
-                  style={[
-                    styles.carIconContainer,
-                    isSelected &&
-                      styles.carIconSelected,
-                  ]}
-                >
-                  <CarFront
-                    size={30}
-                    color={COLORS.blue}
-                    strokeWidth={1.8}
-                  />
-                </View>
-
-                <View style={styles.cardTitleContainer}>
-                  <Text
-                    style={styles.carTitle}
-                    numberOfLines={2}
-                  >
-                    {car.make} {car.model}
-                  </Text>
-
-                  <Text style={styles.carSubtitle}>
-                    {car.year}
-                    {car.engine
-                      ? ` · ${car.engine}`
-                      : ''}
-                  </Text>
-                </View>
-
-                <ChevronRight
-                  size={22}
-                  color={COLORS.muted}
-                />
-              </View>
-
-              {/* SELECTED INDICATOR */}
-
-              {isSelected && (
-                <View style={styles.selectedRow}>
-                  <View style={styles.selectedIndicator}>
-                    <Check
-                      size={13}
-                      color={COLORS.green}
-                      strokeWidth={3}
-                    />
-                    <Text style={styles.selectedText}>
-                      Current vehicle
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* DIVIDER */}
-
-              <View style={styles.cardDivider} />
-
-              {/* MILEAGE */}
-
-              <View style={styles.mileageSection}>
-                <View style={styles.mileageIcon}>
-                  <Gauge
-                    size={19}
-                    color={COLORS.blue}
-                  />
-                </View>
-
-                <View style={styles.mileageInfo}>
-                  <Text style={styles.mileageLabel}>
-                    CURRENT MILEAGE
-                  </Text>
-
-                  <View style={styles.mileageValueRow}>
-                    <Text style={styles.mileageValue}>
-                      {car.mileage.toLocaleString()}
-                    </Text>
-
-                    <Text style={styles.mileageUnit}>
-                      km
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* MAINTENANCE STATUS */}
-
-              <View style={styles.maintenanceContainer}>
-                <MaintenanceSummary
-                  carId={car.id}
-                  mileage={car.mileage}
-                />
-              </View>
-
-              {/* CARD FOOTER */}
-
-              <View style={styles.cardFooter}>
-                <Text style={styles.cardFooterText}>
-                  Vehicle details
-                </Text>
-
-                <ArrowRight
-                  size={17}
-                  color={COLORS.blue}
-                  strokeWidth={2.2}
-                />
-              </View>
-            </Pressable>
-          );
+          const active = car.id === currentId;
+          return <Pressable key={car.id} onPress={() => openCar(car.id)} style={({ pressed }) => [s.carCard, active && s.activeCard, pressed && { opacity: 0.85 }]}>
+            <View style={s.cardTop}>
+              <View style={[s.carIcon, active && s.activeIcon]}><CarFront size={29} color={C.blue} strokeWidth={1.8} /></View>
+              <View style={s.carIdentity}><Text style={s.carName} numberOfLines={2}>{car.make} {car.model}</Text><Text style={s.carMeta}>{car.year}{car.engine ? `  ·  ${car.engine}` : ''}</Text></View>
+              <ChevronRight size={21} color="#8BA6BF" />
+            </View>
+            {active && <View style={s.primaryBadge}><Check size={13} color={C.green} strokeWidth={3} /><Text style={s.primaryLabel}>Current vehicle</Text></View>}
+            <View style={s.divider} />
+            <View style={s.mileageRow}><View style={s.mileageIcon}><Gauge size={20} color={C.blue} /></View><View style={{ flex: 1 }}><Text style={s.fieldLabel}>CURRENT MILEAGE</Text><Text style={s.mileageValue}>{mileage(car.mileage)} <Text style={s.km}>km</Text></Text></View></View>
+            <View style={s.maintenance}><MaintenanceStatus carId={car.id} mileage={car.mileage} /></View>
+            <View style={s.cardFooter}><Text style={s.detailsText}>View car details</Text><ArrowUpRight size={18} color={C.blue} /></View>
+          </Pressable>;
         })}
-
-        {/* ADD ANOTHER CAR */}
-
-        {cars.length > 0 && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.addCarButton,
-              pressed && styles.pressedButton,
-            ]}
-            onPress={handleAddCar}
-          >
-            <View style={styles.addCarIcon}>
-              <Plus
-                size={19}
-                color={COLORS.blue}
-                strokeWidth={2.4}
-              />
-            </View>
-
-            <View style={styles.addCarInfo}>
-              <Text style={styles.addCarTitle}>
-                Add another car
-              </Text>
-
-              <Text style={styles.addCarSubtitle}>
-                Expand your garage
-              </Text>
-            </View>
-
-            <ChevronRight
-              size={20}
-              color={COLORS.blue}
-            />
-          </Pressable>
-        )}
-      </ScrollView>
-    </ImageBackground>
-  );
+        {cars.length > 0 && <Pressable style={s.addCard} onPress={addCar}><View style={s.addIcon}><Plus size={22} color={C.blue} /></View><View style={{ flex: 1 }}><Text style={s.addTitle}>Add another car</Text><Text style={s.addSubtitle}>Expand your garage</Text></View><ChevronRight size={21} color={C.blue} /></Pressable>}
+      </View>
+    </ScrollView>
+  </View>;
 }
 
-// -----------------------------------
-// STYLES
-// -----------------------------------
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    width: '100%',
-    backgroundColor: COLORS.sky,
-  },
-
-  scrollView: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-
-  content: {
-    paddingHorizontal: 20,
-  },
-
-  // HEADER
-
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-
-  headerInfo: {
-    flex: 1,
-    paddingRight: 12,
-  },
-
-  title: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: COLORS.navy,
-    letterSpacing: -0.7,
-  },
-
-  subtitle: {
-    fontSize: 14,
-    color: COLORS.muted,
-    marginTop: 5,
-  },
-
-  addSmallButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    backgroundColor: COLORS.yellow,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#C58B16',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-
-  pressedButton: {
-    opacity: 0.75,
-  },
-
-  // GARAGE SUMMARY
-
-  garageSummary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 18,
-    gap: 8,
-  },
-
-  garageSummaryIcon: {
-    width: 27,
-    height: 27,
-    borderRadius: 9,
-    backgroundColor: 'rgba(255,255,255,0.75)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  garageSummaryText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.navy,
-  },
-
-  garageSummaryDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.muted,
-  },
-
-  garageSummaryRight: {
-    fontSize: 12,
-    color: COLORS.muted,
-  },
-
-  // VEHICLE CARD
-
-  carCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 24,
-    padding: 18,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.navy,
-    shadowOffset: {
-      width: 0,
-      height: 6,
-    },
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    elevation: 3,
-  },
-
-  selectedCarCard: {
-    borderColor: COLORS.yellow,
-    borderWidth: 2,
-  },
-
-  pressedCard: {
-    opacity: 0.85,
-  },
-
-  // CARD HEADER
-
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-
-  carIconContainer: {
-    width: 58,
-    height: 58,
-    borderRadius: 18,
-    backgroundColor: '#EAF5FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  carIconSelected: {
-    backgroundColor: '#E4F2FF',
-  },
-
-  cardTitleContainer: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  carTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.navy,
-    letterSpacing: -0.3,
-  },
-
-  carSubtitle: {
-    fontSize: 13,
-    color: COLORS.muted,
-    marginTop: 5,
-  },
-
-  // SELECTED
-
-  selectedRow: {
-    marginTop: 14,
-    flexDirection: 'row',
-  },
-
-  selectedIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#E7F6F0',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-
-  selectedText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.green,
-  },
-
-  // DIVIDER
-
-  cardDivider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 16,
-  },
-
-  // MILEAGE
-
-  mileageSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-
-  mileageIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: '#EDF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  mileageInfo: {
-    flex: 1,
-  },
-
-  mileageLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1,
-    color: COLORS.muted,
-  },
-
-  mileageValueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 5,
-    marginTop: 3,
-  },
-
-  mileageValue: {
-    fontSize: 25,
-    fontWeight: '800',
-    color: COLORS.navy,
-    letterSpacing: -0.6,
-  },
-
-  mileageUnit: {
-    fontSize: 13,
-    color: COLORS.muted,
-  },
-
-  // MAINTENANCE
-
-  maintenanceContainer: {
-    marginTop: 16,
-    backgroundColor: '#F5F9FC',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-
-  maintenanceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 7,
-  },
-
-  maintenanceMuted: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: COLORS.muted,
-  },
-
-  maintenanceDanger: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.red,
-  },
-
-  maintenanceWarning: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.amber,
-  },
-
-  maintenanceSuccess: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.green,
-  },
-
-  maintenanceError: {
-    fontSize: 12,
-    color: COLORS.red,
-  },
-
-  // CARD FOOTER
-
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 7,
-    marginTop: 17,
-  },
-
-  cardFooterText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.blue,
-  },
-
-  // ADD CAR
-
-  addCarButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    backgroundColor: 'rgba(255,255,255,0.82)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#A8C9E2',
-    borderStyle: 'dashed',
-    gap: 12,
-    marginTop: 4,
-  },
-
-  addCarIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#E6F3FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  addCarInfo: {
-    flex: 1,
-  },
-
-  addCarTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.navy,
-  },
-
-  addCarSubtitle: {
-    fontSize: 12,
-    color: COLORS.muted,
-    marginTop: 4,
-  },
-
-  // EMPTY STATE
-
-  emptyCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 24,
-    padding: 28,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-
-  emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-    backgroundColor: '#EAF5FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-
-  emptyTitle: {
-    fontSize: 19,
-    fontWeight: '800',
-    color: COLORS.navy,
-  },
-
-  emptyDescription: {
-    fontSize: 13,
-    color: COLORS.muted,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginTop: 8,
-  },
-
-  emptyAddButton: {
-    marginTop: 22,
-    backgroundColor: COLORS.yellow,
-    paddingHorizontal: 20,
-    paddingVertical: 13,
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-
-  emptyAddText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.navy,
-  },
-
-  // ERRORS AND STATUS
-
-  statusText: {
-    fontSize: 14,
-    color: COLORS.muted,
-    marginBottom: 16,
-  },
-
-  errorCard: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 14,
-    padding: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 16,
-  },
-
-  errorText: {
-    fontSize: 13,
-    color: COLORS.red,
-    flex: 1,
-  },
+const s = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: '#F3F9FE' },
+  hero: { height: 280, paddingHorizontal: 22, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden', justifyContent: 'space-between', paddingBottom: 24 },
+  heroHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  heading: { fontSize: 32, fontWeight: '800', color: C.navy, letterSpacing: -0.8 },
+  heroSubtitle: { fontSize: 14, color: '#365E7D', marginTop: 5 },
+  heroAdd: { width: 44, height: 44, borderRadius: 15, backgroundColor: C.yellow, alignItems: 'center', justifyContent: 'center' },
+  heroBottom: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 9, paddingHorizontal: 15, paddingVertical: 11, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.89)' },
+  heroCount: { color: C.navy, fontSize: 13, fontWeight: '700' },
+  body: { paddingHorizontal: 18, paddingTop: 26 },
+  sectionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 17 },
+  sectionTitle: { fontSize: 21, fontWeight: '800', color: C.navy },
+  sectionCount: { color: C.muted, fontSize: 13, fontWeight: '600' },
+  feedback: { color: C.muted, marginVertical: 24, textAlign: 'center' },
+  carCard: { backgroundColor: C.white, borderRadius: 23, padding: 18, marginBottom: 15, borderWidth: 1, borderColor: C.border, shadowColor: '#235A82', shadowOpacity: 0.06, shadowRadius: 15, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
+  activeCard: { borderColor: '#A9DDF9' },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 13 },
+  carIcon: { width: 60, height: 60, backgroundColor: '#EDF7FF', borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  activeIcon: { backgroundColor: '#DDF2FF' },
+  carIdentity: { flex: 1 },
+  carName: { color: C.navy, fontSize: 19, fontWeight: '800' },
+  carMeta: { color: C.muted, fontSize: 13, marginTop: 5 },
+  primaryBadge: { marginTop: 14, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#E8F8F0', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 20 },
+  primaryLabel: { color: C.green, fontSize: 12, fontWeight: '700' },
+  divider: { height: 1, backgroundColor: '#EDF2F7', marginVertical: 17 },
+  mileageRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  mileageIcon: { width: 43, height: 43, borderRadius: 13, backgroundColor: '#F1F8FE', justifyContent: 'center', alignItems: 'center' },
+  fieldLabel: { fontSize: 10, letterSpacing: 1, fontWeight: '800', color: C.muted },
+  mileageValue: { fontSize: 23, fontWeight: '800', color: C.navy, marginTop: 3 },
+  km: { fontSize: 13, fontWeight: '500', color: C.muted },
+  maintenance: { marginTop: 17, backgroundColor: '#F5FAFE', paddingHorizontal: 12, paddingVertical: 13, borderRadius: 13 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  statusText: { fontSize: 12, fontWeight: '600', color: C.muted, flexShrink: 1 },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 17, marginTop: 16, borderTopWidth: 1, borderTopColor: '#EDF2F7' },
+  detailsText: { fontSize: 13, fontWeight: '800', color: C.blue },
+  addCard: { backgroundColor: '#EAF6FF', borderWidth: 1, borderStyle: 'dashed', borderColor: '#A7D4F1', borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 13 },
+  addIcon: { width: 45, height: 45, borderRadius: 14, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center' },
+  addTitle: { fontSize: 15, fontWeight: '800', color: C.navy },
+  addSubtitle: { fontSize: 12, color: C.muted, marginTop: 4 },
+  empty: { backgroundColor: C.white, borderRadius: 22, alignItems: 'center', padding: 30, gap: 12 },
+  emptyTitle: { fontSize: 19, fontWeight: '800', color: C.navy },
+  emptyCaption: { color: C.muted, textAlign: 'center', lineHeight: 21 },
+  primaryButton: { flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: C.yellow, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 16, marginTop: 10 },
+  primaryButtonText: { fontSize: 14, fontWeight: '800', color: C.navy },
 });

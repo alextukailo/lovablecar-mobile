@@ -1,11 +1,25 @@
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
+import * as Crypto from 'expo-crypto';
+import * as Notifications from 'expo-notifications';
+import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+} from 'react';
 import {
     ActivityIndicator,
     Alert,
+    ImageBackground,
+    KeyboardAvoidingView,
     Platform,
     Pressable,
     SafeAreaView,
+    ScrollView,
     StyleSheet,
     Text,
     View,
@@ -17,14 +31,18 @@ import {
     setSessionToken,
 } from '@/auth/sessionStorage';
 
-import * as Clipboard from 'expo-clipboard';
-import * as Crypto from 'expo-crypto';
-import * as Notifications from 'expo-notifications';
-import { useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const POLL_INTERVAL_MS = 12000;
+
+const COLORS = {
+  navy: '#102647',
+  blue: '#41668B',
+  sky: '#EAF6FF',
+  white: '#FFFFFF',
+  yellow: '#FFD33F',
+  muted: '#8295A8',
+  green: '#22A06B',
+};
 
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
@@ -37,15 +55,6 @@ if (Platform.OS !== 'web') {
   });
 }
 
-
-/**
- * Show the confirmation code in a local notification.
- *
- * This runs on the device that started the login.
- * It does not require a push token or backend changes.
- *
- * Notification errors must never block authentication.
- */
 async function notifyConfirmationCode(
   code: string,
 ): Promise<void> {
@@ -63,9 +72,6 @@ async function notifyConfirmationCode(
     }
 
     if (!permissions.granted) {
-      console.info(
-        'Notification permission not granted.',
-      );
       return;
     }
 
@@ -206,7 +212,7 @@ async function postJson<T>(
         detail = errorBody.message;
       }
     } catch {
-      // Use the HTTP status if no JSON message exists.
+      // Use HTTP status when no JSON message exists.
     }
 
     throw new ApiError(
@@ -251,7 +257,6 @@ export default function LoginScreen() {
     useRef(false);
 
   const mountedRef = useRef(true);
-
   const completedRef = useRef(false);
 
   const pollTimerRef =
@@ -261,10 +266,6 @@ export default function LoginScreen() {
 
   const pollGenerationRef = useRef(0);
 
-  /**
-   * Prevent duplicate notifications for one
-   * login transaction.
-   */
   const notifiedTransactionRef =
     useRef<string | null>(null);
 
@@ -299,11 +300,6 @@ export default function LoginScreen() {
         throw new Error('Invalid session response');
       }
 
-      /*
-       * Save the token before verifying the session.
-       * The exchange is one-time, so do not exchange
-       * the same transaction again after this point.
-       */
       await setSessionToken(session.token);
 
       pendingRef.current = null;
@@ -314,11 +310,6 @@ export default function LoginScreen() {
       try {
         await refreshSession();
       } catch (error) {
-        /*
-         * Preserve the saved token so a temporary
-         * network failure doesn't force another
-         * Telegram login.
-         */
         const detail =
           error instanceof Error
             ? error.message
@@ -415,10 +406,6 @@ export default function LoginScreen() {
           generation !== pollGenerationRef.current ||
           pendingRef.current !== pending
         ) {
-          /*
-           * A stale response must not replace
-           * the active login session.
-           */
           return;
         }
 
@@ -438,13 +425,6 @@ export default function LoginScreen() {
           error instanceof ApiError &&
           error.status === 401
         ) {
-          /*
-           * The backend currently returns 401
-           * while approval is pending.
-           *
-           * We retry until the transaction
-           * expires or is approved.
-           */
           if (
             error.message.includes(
               'already been used',
@@ -581,33 +561,28 @@ export default function LoginScreen() {
 
       pendingRef.current = pending;
 
-        setConfirmationCode(
+      setConfirmationCode(
         pending.confirmationCode,
-        );
+      );
 
-        // Automatically copy the code before Safari opens.
-        try {
+      // Copy the code automatically.
+      try {
         await Clipboard.setStringAsync(
-            pending.confirmationCode,
+          pending.confirmationCode,
         );
-        } catch (error) {
-        console.warn('Could not copy confirmation code:', error);
-        }
+      } catch (error) {
+        console.warn(
+          'Could not copy confirmation code:',
+          error,
+        );
+      }
 
-        setPhase('waiting');
+      setPhase('waiting');
 
       setMessage(
         'Enter this code in the browser and approve the login with Telegram. LovableCar will continue automatically.',
       );
 
-      /*
-       * Notify once per login transaction.
-       *
-       * The notification is scheduled before
-       * opening the Telegram login browser.
-       *
-       * Notification failures never stop login.
-       */
       if (
         notifiedTransactionRef.current !==
         pending.transactionId
@@ -620,11 +595,6 @@ export default function LoginScreen() {
         );
       }
 
-      /*
-       * Start polling before opening the browser.
-       * This allows automatic completion as soon
-       * as Telegram approval reaches the backend.
-       */
       const generation =
         pollGenerationRef.current;
 
@@ -648,11 +618,6 @@ export default function LoginScreen() {
         loginUrl,
       );
     } catch (error) {
-      /*
-       * Opening the external browser can fail
-       * even when the transaction is valid.
-       * Stop the flow and allow a fresh attempt.
-       */
       stopPolling();
       pendingRef.current = null;
 
@@ -690,217 +655,465 @@ export default function LoginScreen() {
     phase === 'exchanging';
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={styles.card}>
-        <Text style={styles.title}>
-          LovableCar
-        </Text>
-
-        <Text style={styles.subtitle}>
-          Secure Telegram sign-in
-        </Text>
-
-        {phase === 'complete' ? (
-          <>
-            <Text style={styles.success}>
-              Signed in
-            </Text>
-
-            <Text style={styles.message}>
-              {message}
-            </Text>
-
-            <Pressable
-              style={styles.button}
-              onPress={() =>
-                router.replace('/')
-              }
+    <ImageBackground
+      source={require('../../assets/images/lovablecar-main-background.png')}
+      style={styles.background}
+      resizeMode="cover"
+    >
+      <View style={styles.overlay}>
+        <SafeAreaView style={styles.screen}>
+          <KeyboardAvoidingView
+            style={styles.keyboardView}
+            behavior={
+              Platform.OS === 'ios'
+                ? 'padding'
+                : undefined
+            }
+          >
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.container}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
-              <Text style={styles.buttonText}>
-                Continue to LovableCar
-              </Text>
-            </Pressable>
-          </>
-        ) : (
-          <>
-            <Text style={styles.message}>
-              {message}
-            </Text>
 
-            {confirmationCode && (
-              <View style={styles.codeCard}>
-                <Text style={styles.codeLabel}>
-                  Your confirmation code
-                </Text>
+              <View style={styles.card}>
+                {phase === 'complete' ? (
+                  <>
+                    <View style={styles.successIcon}>
+                      <Ionicons
+                        name="checkmark"
+                        size={30}
+                        color={COLORS.white}
+                      />
+                    </View>
 
-                <Text
-                  style={styles.code}
-                  selectable={false}
-                >
-                  {confirmationCode}
-                </Text>
+                    <Text style={styles.title}>
+                      You're all set!
+                    </Text>
 
-                <Text style={styles.codeHelp}>
-                  Only enter this code on the
-                  LovableCar login page you opened.
-                  Never send it to another person.
-                </Text>
+                    {signedInUser && (
+                      <Text style={styles.userName}>
+                        Welcome, {signedInUser}
+                      </Text>
+                    )}
+
+                    <Text style={styles.description}>
+                      {message}
+                    </Text>
+
+                    <Pressable
+                      style={styles.button}
+                      onPress={() =>
+                        router.replace('/')
+                      }
+                    >
+                      <Text style={styles.buttonText}>
+                        Continue to LovableCar
+                      </Text>
+
+                      <Ionicons
+                        name="arrow-forward"
+                        size={19}
+                        color={COLORS.navy}
+                      />
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.title}>
+                      {phase === 'waiting'
+                        ? 'Almost there!'
+                        : phase === 'starting'
+                          ? 'Connecting...'
+                          : phase === 'exchanging'
+                            ? 'Signing you in...'
+                            : 'Welcome back'}
+                    </Text>
+
+                    <Text style={styles.description}>
+                      {phase === 'idle'
+                        ? 'Sign in with Telegram to access your garage and maintenance history.'
+                        : message}
+                    </Text>
+
+                    {/* CONFIRMATION CODE */}
+
+                    {confirmationCode && (
+                      <View style={styles.codeCard}>
+                        <View style={styles.codeHeader}>
+                          <Ionicons
+                            name="key-outline"
+                            size={16}
+                            color={COLORS.blue}
+                          />
+
+                          <Text style={styles.codeLabel}>
+                            CONFIRMATION CODE
+                          </Text>
+                        </View>
+
+                        <Text
+                          style={styles.code}
+                          selectable={false}
+                        >
+                          {confirmationCode}
+                        </Text>
+
+                        <View style={styles.copiedRow}>
+                          <Ionicons
+                            name="copy-outline"
+                            size={14}
+                            color={COLORS.blue}
+                          />
+
+                          <Text style={styles.codeHelp}>
+                            Automatically copied
+                          </Text>
+                        </View>
+
+                        <Text style={styles.codeWarning}>
+                          Enter this code only on the
+                          LovableCar login page you opened.
+                          Never share it with anyone.
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* LOADING */}
+
+                    {busy && (
+                      <ActivityIndicator
+                        size="large"
+                        color={COLORS.navy}
+                        style={styles.spinner}
+                      />
+                    )}
+
+                    {/* LOGIN BUTTON */}
+
+                    {phase === 'idle' && (
+                      <Pressable
+                        onPress={startLogin}
+                        style={({ pressed }) => [
+                          styles.button,
+                          pressed && styles.buttonPressed,
+                        ]}
+                      >
+                        <Ionicons
+                          name="paper-plane"
+                          size={19}
+                          color={COLORS.navy}
+                        />
+
+                        <Text style={styles.buttonText}>
+                          Continue with Telegram
+                        </Text>
+
+                        <Ionicons
+                          name="arrow-forward"
+                          size={18}
+                          color={COLORS.navy}
+                        />
+                      </Pressable>
+                    )}
+
+                    {/* WAITING */}
+
+                    {phase === 'waiting' && (
+                      <>
+                        <View style={styles.waitingRow}>
+                          <ActivityIndicator
+                            size="small"
+                            color={COLORS.blue}
+                          />
+
+                          <Text style={styles.waitingText}>
+                            Waiting for Telegram approval...
+                          </Text>
+                        </View>
+
+                        <Pressable
+                          style={styles.secondaryButton}
+                          onPress={startLogin}
+                        >
+                          <Text style={styles.secondaryText}>
+                            Start a new login
+                          </Text>
+                        </Pressable>
+                      </>
+                    )}
+                  </>
+                )}
               </View>
-            )}
 
-            {busy && (
-              <ActivityIndicator
-                size="large"
-                style={styles.spinner}
-              />
-            )}
+              {/* FOOTER */}
 
-            {phase === 'idle' && (
-              <Pressable
-                style={styles.button}
-                onPress={startLogin}
-              >
-                <Text style={styles.buttonText}>
-                  Continue with Telegram
-                </Text>
-              </Pressable>
-            )}
-
-            {phase === 'waiting' && (
-              <>
-                <ActivityIndicator
-                  size="large"
-                  style={styles.spinner}
+              <View style={styles.footer}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={16}
+                  color={COLORS.navy}
                 />
 
-                <Text style={styles.waitingText}>
-                  Waiting for Telegram approval...
+                <Text style={styles.footerText}>
+                  Secure login · No password required
                 </Text>
-
-                <Pressable
-                  style={styles.secondaryButton}
-                  onPress={startLogin}
-                >
-                  <Text style={styles.secondaryText}>
-                    Start a new login
-                  </Text>
-                </Pressable>
-              </>
-            )}
-          </>
-        )}
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </View>
-    </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(234, 246, 255, 0.18)',
+  },
+
   screen: {
     flex: 1,
-    backgroundColor: '#F4F6F9',
+    backgroundColor: 'transparent',
+  },
+
+  keyboardView: {
+    flex: 1,
+  },
+
+  scroll: {
+    flex: 1,
+  },
+
+  container: {
+    flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: 35,
+    paddingBottom: 35,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+  },
+
+  brandSection: {
+    alignItems: 'center',
+    marginBottom: 34,
+  },
+
+  logo: {
+    width: 72,
+    height: 72,
+    borderRadius: 23,
+    backgroundColor: COLORS.yellow,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 17,
+    shadowColor: COLORS.navy,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+
+  brand: {
+    fontSize: 33,
+    fontWeight: '900',
+    color: COLORS.navy,
+    textAlign: 'center',
+    letterSpacing: -1.1,
+  },
+
+  tagline: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.blue,
+    textAlign: 'center',
+    marginTop: 8,
   },
 
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 28,
-    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderRadius: 26,
+    padding: 26,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.8)',
+    shadowColor: COLORS.navy,
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 22,
+    elevation: 4,
   },
 
   title: {
-    fontSize: 32,
+    fontSize: 25,
     fontWeight: '800',
-    color: '#172033',
-  },
-
-  subtitle: {
-    marginTop: 8,
-    fontSize: 16,
-    color: '#536174',
-  },
-
-  message: {
-    marginTop: 24,
+    color: COLORS.navy,
     textAlign: 'center',
-    color: '#536174',
-    fontSize: 15,
-    lineHeight: 23,
+    letterSpacing: -0.6,
   },
 
-  codeCard: {
-    width: '100%',
-    marginTop: 24,
-    padding: 20,
-    borderRadius: 14,
-    backgroundColor: '#EDF7FC',
-    alignItems: 'center',
-  },
-
-  codeLabel: {
-    fontSize: 13,
-    color: '#36566C',
-    fontWeight: '600',
-  },
-
-  code: {
-    marginTop: 10,
-    fontSize: 36,
-    fontWeight: '800',
-    letterSpacing: 7,
-    color: '#006A9E',
-  },
-
-  codeHelp: {
-    marginTop: 12,
-    textAlign: 'center',
-    fontSize: 12,
-    lineHeight: 18,
-    color: '#536174',
-  },
-
-  spinner: {
-    marginTop: 24,
-  },
-
-  waitingText: {
-    marginTop: 12,
+  description: {
     fontSize: 14,
-    color: '#536174',
+    lineHeight: 22,
+    color: COLORS.blue,
     textAlign: 'center',
+    marginTop: 12,
   },
 
   button: {
-    width: '100%',
-    marginTop: 24,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    backgroundColor: '#0088CC',
-    borderRadius: 12,
+    marginTop: 28,
+    minHeight: 56,
+    backgroundColor: COLORS.yellow,
+    borderRadius: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+  },
+
+  buttonPressed: {
+    opacity: 0.75,
   },
 
   buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.navy,
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+
+  codeCard: {
+    marginTop: 24,
+    backgroundColor: COLORS.sky,
+    borderRadius: 18,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#D7EAF8',
+  },
+
+  codeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+
+  codeLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.blue,
+    letterSpacing: 1,
+  },
+
+  code: {
+    fontSize: 37,
+    fontWeight: '900',
+    letterSpacing: 5,
+    color: COLORS.navy,
+    marginTop: 14,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+  },
+
+  copiedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+  },
+
+  codeHelp: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.blue,
+  },
+
+  codeWarning: {
+    marginTop: 15,
+    fontSize: 11,
+    lineHeight: 17,
+    textAlign: 'center',
+    color: COLORS.muted,
+  },
+
+  spinner: {
+    marginTop: 25,
+  },
+
+  waitingRow: {
+    marginTop: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+
+  waitingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.blue,
+    flexShrink: 1,
   },
 
   secondaryButton: {
-    marginTop: 16,
+    marginTop: 20,
+    alignItems: 'center',
     padding: 12,
   },
 
   secondaryText: {
-    color: '#0088CC',
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.blue,
   },
 
-  success: {
-    marginTop: 24,
-    fontSize: 22,
+  successIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 20,
+    backgroundColor: COLORS.green,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginBottom: 18,
+  },
+
+  userName: {
+    marginTop: 8,
+    textAlign: 'center',
+    fontSize: 15,
     fontWeight: '700',
-    color: '#067647',
+    color: COLORS.blue,
+  },
+
+  footer: {
+    marginTop: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+
+  footerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.navy,
   },
 });

@@ -20,6 +20,7 @@ export interface ApiMaintenanceSchedule {
   lastServiceMileage: number | null;
   lastServiceDate: string | null;
   nextDueMileage: number | null;
+  sourceServiceRecordId?: string | null;
   nextDueDate: string | null;
   warningKm: number;
   warningDays: number;

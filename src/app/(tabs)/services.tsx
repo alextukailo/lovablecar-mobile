@@ -16,6 +16,7 @@ import {
     X,
 } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
     FlatList,
@@ -65,12 +66,24 @@ interface ServiceListItem extends ApiService {
 
 const SORT_OPTIONS: {
   value: ServiceSortOrder;
-  label: string;
+  key: string;
 }[] = [
-  { value: 'newest', label: 'Newest' },
-  { value: 'oldest', label: 'Oldest' },
-  { value: 'mileage-high', label: 'Mileage ↓' },
-  { value: 'mileage-low', label: 'Mileage ↑' },
+  {
+    value: 'newest',
+    key: 'newestFirst',
+  },
+  {
+    value: 'oldest',
+    key: 'oldestFirst',
+  },
+  {
+    value: 'mileage-high',
+    key: 'mileageHigh',
+  },
+  {
+    value: 'mileage-low',
+    key: 'mileageLow',
+  },
 ];
 
 async function fetchCarServices(
@@ -83,25 +96,43 @@ async function fetchCarServices(
   return response.data;
 }
 
-function formatDate(value: string) {
+function formatDate(
+  value: string,
+  language: string,
+): string {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
     return value;
   }
 
-  return date.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  return date.toLocaleDateString(
+    language.startsWith('ru')
+      ? 'ru-RU'
+      : 'en-GB',
+    {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    },
+  );
 }
 
-function formatNumber(value: number) {
-  return value.toLocaleString('en-US');
+function formatNumber(
+  value: number,
+  language: string,
+): string {
+  return value.toLocaleString(
+    language.startsWith('ru')
+      ? 'ru-RU'
+      : 'en-US',
+  );
 }
 
-function formatMoney(value: string | number | null | undefined) {
+function formatMoney(
+  value: string | number | null | undefined,
+  language: string,
+): string {
   if (value === null || value === undefined) {
     return '—';
   }
@@ -112,10 +143,15 @@ function formatMoney(value: string | number | null | undefined) {
     return String(value);
   }
 
-  return number.toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
+  return number.toLocaleString(
+    language.startsWith('ru')
+      ? 'ru-RU'
+      : 'en-US',
+    {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    },
+  );
 }
 
 function getServiceIcon(title: string) {
@@ -146,6 +182,10 @@ function getServiceIcon(title: string) {
 }
 
 export default function ServicesScreen() {
+  const { t, i18n } = useTranslation();
+
+  const language = i18n.language;
+
   const [filtersExpanded, setFiltersExpanded] =
     useState(false);
 
@@ -193,47 +233,62 @@ export default function ServicesScreen() {
   );
 
   const selectedCar =
-    cars.find((car) => car.id === selectedCarId) ??
+    cars.find(
+      (car) => car.id === selectedCarId,
+    ) ??
     cars.find((car) => car.isPrimary) ??
     cars[0] ??
     null;
 
   const serviceQueries = useQueries({
     queries: cars.map((car) => ({
-      queryKey: ['cars', car.id, 'services'],
-      queryFn: () => fetchCarServices(car.id),
+      queryKey: [
+        'cars',
+        car.id,
+        'services',
+      ],
+      queryFn: () =>
+        fetchCarServices(car.id),
     })),
   });
 
-  const isLoadingServices = serviceQueries.some(
-    (query) => query.isPending,
-  );
+  const isLoadingServices =
+    serviceQueries.some(
+      (query) => query.isPending,
+    );
 
-  const isServicesError = serviceQueries.some(
-    (query) => query.isError,
-  );
+  const isServicesError =
+    serviceQueries.some(
+      (query) => query.isError,
+    );
 
   const allServices: ServiceListItem[] =
     cars.flatMap((car, index) => {
-      const records = serviceQueries[index]?.data ?? [];
+      const records =
+        serviceQueries[index]?.data ?? [];
 
       return records.map((record) => ({
         ...record,
         carId: car.id,
-        carName: `${car.make} ${car.model}`,
+        carName:
+          `${car.make} ${car.model}`,
       }));
     });
 
   const selectedServices = allServices.filter(
-    (service) => service.carId === selectedCar?.id,
+    (service) =>
+      service.carId === selectedCar?.id,
   );
 
   const visibleServices = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+    const query =
+      searchQuery.trim().toLowerCase();
 
     const filtered = selectedServices.filter(
       (service) => {
-        if (!query) return true;
+        if (!query) {
+          return true;
+        }
 
         return [
           service.title,
@@ -261,6 +316,7 @@ export default function ServicesScreen() {
         case 'mileage-low':
           return a.mileage - b.mileage;
 
+        case 'newest':
         default:
           return (
             new Date(b.date).getTime() -
@@ -268,33 +324,38 @@ export default function ServicesScreen() {
           );
       }
     });
-  }, [selectedServices, searchQuery, sortOrder]);
+  }, [
+    selectedServices,
+    searchQuery,
+    sortOrder,
+  ]);
 
-  const totalsByCurrency = selectedServices.reduce<
-    Record<string, number>
-  >((totals, service) => {
-    if (
-      service.cost === null ||
-      service.cost === undefined
-    ) {
-      return totals;
-    }
+  const totalEntries = useMemo(() => {
+    const totals: Record<string, number> = {};
 
-    const value = Number(service.cost);
+    selectedServices.forEach((service) => {
+      const cost = Number(service.cost);
 
-    if (!Number.isFinite(value)) return totals;
+      if (
+        service.cost == null ||
+        !Number.isFinite(cost)
+      ) {
+        return;
+      }
 
-    const currency = service.currency || 'BYN';
+      const currency =
+        service.currency || 'PLN';
 
-    totals[currency] =
-      (totals[currency] ?? 0) + value;
+      totals[currency] =
+        (totals[currency] || 0) + cost;
+    });
 
-    return totals;
-  }, {});
+    return Object.entries(totals);
+  }, [selectedServices]);
 
-  const totalEntries = Object.entries(totalsByCurrency);
-
-  const openService = (service: ServiceListItem) => {
+  const openService = (
+    service: ServiceListItem,
+  ) => {
     selectCar(service.carId);
 
     router.push({
@@ -341,8 +402,9 @@ export default function ServicesScreen() {
           size="large"
           color={C.blue}
         />
+
         <Text style={styles.statusText}>
-          Loading your cars...
+          {t('cars.loadingCars')}
         </Text>
       </View>
     );
@@ -352,14 +414,15 @@ export default function ServicesScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.emptyTitle}>
-          Unable to load cars
+          {t('cars.carsUnavailable')}
         </Text>
+
         <Pressable
           style={styles.yellowButton}
           onPress={retry}
         >
           <Text style={styles.yellowButtonText}>
-            Try again
+            {t('common.retry')}
           </Text>
         </Pressable>
       </View>
@@ -372,35 +435,42 @@ export default function ServicesScreen() {
         source={require('../../../assets/images/lovablecar-main-background.png')}
         resizeMode="cover"
         style={styles.background}
-        blurRadius={10}
+        blurRadius={18}
       >
         <FlatList
           data={
-            isLoadingServices || isServicesError
+            isLoadingServices ||
+            isServicesError
               ? []
               : visibleServices
           }
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={
+            styles.listContent
+          }
           ListHeaderComponent={
             <>
-              {/* PAGE TITLE */}
               <View style={styles.heading}>
                 <Text style={styles.pageTitle}>
-                  Service History
+                  {t('services.serviceHistory')}
                 </Text>
 
-                <Text style={styles.pageSubtitle}>
-                  Keep your car in perfect condition
+                <Text
+                  style={styles.pageSubtitle}
+                >
+                  {t('services.heroSubtitle')}
                 </Text>
               </View>
 
-              {/* CAR SELECTOR */}
               {selectedCar && (
-                <View style={styles.vehicleCard}>
-                  <View style={styles.vehicleIcon}>
+                <View
+                  style={styles.vehicleCard}
+                >
+                  <View
+                    style={styles.vehicleIcon}
+                  >
                     <CarFront
                       size={29}
                       color={C.navy}
@@ -408,13 +478,21 @@ export default function ServicesScreen() {
                     />
                   </View>
 
-                  <View style={styles.vehicleInfo}>
-                    <Text style={styles.vehicleName}>
+                  <View
+                    style={styles.vehicleInfo}
+                  >
+                    <Text
+                      style={styles.vehicleName}
+                    >
                       {selectedCar.make}{' '}
                       {selectedCar.model}
                     </Text>
 
-                    <Text style={styles.vehicleDetails}>
+                    <Text
+                      style={
+                        styles.vehicleDetails
+                      }
+                    >
                       {selectedCar.year}
                       {selectedCar.engine
                         ? ` · ${selectedCar.engine}`
@@ -422,70 +500,109 @@ export default function ServicesScreen() {
                     </Text>
                   </View>
 
-                  <View style={styles.vehicleMileage}>
+                  <View
+                    style={
+                      styles.vehicleMileage
+                    }
+                  >
                     <Gauge
                       size={16}
                       color={C.blue}
                     />
-                    <Text style={styles.vehicleMileageText}>
-                      {formatNumber(selectedCar.mileage)}
+
+                    <Text
+                      style={
+                        styles.vehicleMileageText
+                      }
+                    >
+                      {formatNumber(
+                        selectedCar.mileage,
+                        language,
+                      )}
                     </Text>
                   </View>
                 </View>
               )}
 
-              {/* MULTIPLE CARS */}
               {cars.length > 1 && (
                 <ScrollView
                   horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.carSelector}
+                  showsHorizontalScrollIndicator={
+                    false
+                  }
+                  contentContainerStyle={
+                    styles.carSelector
+                  }
                 >
                   {cars.map((car) => (
                     <Pressable
                       key={car.id}
-                      onPress={() => selectCar(car.id)}
+                      onPress={() =>
+                        selectCar(car.id)
+                      }
                       style={[
                         styles.carChip,
-                        selectedCar?.id === car.id &&
+                        selectedCar?.id ===
+                          car.id &&
                           styles.carChipActive,
                       ]}
                     >
                       <Text
                         style={[
                           styles.carChipText,
-                          selectedCar?.id === car.id &&
+                          selectedCar?.id ===
+                            car.id &&
                             styles.carChipTextActive,
                         ]}
                       >
-                        {car.make} {car.model}
+                        {car.make}{' '}
+                        {car.model}
                       </Text>
                     </Pressable>
                   ))}
                 </ScrollView>
               )}
 
-              {/* SUMMARY */}
               <View style={styles.summaryRow}>
-                <View style={styles.summaryCard}>
-                  <View style={styles.summaryIconBlue}>
+                <View
+                  style={styles.summaryCard}
+                >
+                  <View
+                    style={
+                      styles.summaryIconBlue
+                    }
+                  >
                     <Wrench
                       size={20}
                       color={C.blue}
                     />
                   </View>
 
-                  <Text style={styles.summaryNumber}>
+                  <Text
+                    style={
+                      styles.summaryNumber
+                    }
+                  >
                     {selectedServices.length}
                   </Text>
 
-                  <Text style={styles.summaryLabel}>
-                    Total services
+                  <Text
+                    style={
+                      styles.summaryLabel
+                    }
+                  >
+                    {t('services.totalServices')}
                   </Text>
                 </View>
 
-                <View style={styles.summaryCard}>
-                  <View style={styles.summaryIconYellow}>
+                <View
+                  style={styles.summaryCard}
+                >
+                  <View
+                    style={
+                      styles.summaryIconYellow
+                    }
+                  >
                     <CircleDollarSign
                       size={21}
                       color={C.navy}
@@ -495,38 +612,61 @@ export default function ServicesScreen() {
                   {showCosts ? (
                     <>
                       <Text
-                        style={styles.summaryNumber}
+                        style={
+                          styles.summaryNumber
+                        }
                         numberOfLines={1}
                         adjustsFontSizeToFit
                       >
                         {totalEntries.length === 1
-                          ? formatMoney(totalEntries[0][1])
+                          ? formatMoney(
+                              totalEntries[0][1],
+                              language,
+                            )
                           : totalEntries.length === 0
                             ? '0'
-                            : 'Multiple'}
+                            : t(
+                                'services.multipleCurrencies',
+                              )}
                       </Text>
 
-                      <Text style={styles.summaryLabel}>
+                      <Text
+                        style={
+                          styles.summaryLabel
+                        }
+                      >
                         {totalEntries.length === 1
-                          ? `Total · ${totalEntries[0][0]}`
-                          : 'Total spending'}
+                          ? `${t('services.totalSpent')} · ${totalEntries[0][0]}`
+                          : t(
+                              'services.totalSpent',
+                            )}
                       </Text>
                     </>
                   ) : (
                     <>
-                      <Text style={styles.summaryNumber}>
+                      <Text
+                        style={
+                          styles.summaryNumber
+                        }
+                      >
                         ••••
                       </Text>
-                      <Text style={styles.summaryLabel}>
-                        Costs hidden
+
+                      <Text
+                        style={
+                          styles.summaryLabel
+                        }
+                      >
+                        {t('services.costsHidden')}
                       </Text>
                     </>
                   )}
                 </View>
               </View>
 
-              {/* SEARCH */}
-              <View style={styles.searchContainer}>
+              <View
+                style={styles.searchContainer}
+              >
                 <Search
                   size={20}
                   color="#6E91B5"
@@ -535,7 +675,9 @@ export default function ServicesScreen() {
                 <TextInput
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  placeholder="Search services or workshops..."
+                  placeholder={t(
+                    'services.searchPlaceholder',
+                  )}
                   placeholderTextColor="#8BA3BC"
                   style={styles.searchInput}
                   autoCorrect={false}
@@ -544,7 +686,9 @@ export default function ServicesScreen() {
 
                 {searchQuery.length > 0 && (
                   <Pressable
-                    onPress={() => setSearchQuery('')}
+                    onPress={() =>
+                      setSearchQuery('')
+                    }
                     hitSlop={10}
                   >
                     <X
@@ -555,79 +699,113 @@ export default function ServicesScreen() {
                 )}
               </View>
 
-              {/* FILTER HEADER */}
-              <View style={styles.filterHeader}>
+              <View
+                style={styles.filterHeader}
+              >
                 <Pressable
                   style={styles.filterToggle}
                   onPress={() =>
-                    setFiltersExpanded(!filtersExpanded)
+                    setFiltersExpanded(
+                      !filtersExpanded,
+                    )
                   }
                 >
                   <SlidersHorizontal
                     size={18}
                     color={C.navy}
                   />
-                  <Text style={styles.filterToggleText}>
-                    Sort & Filters
+
+                  <Text
+                    style={
+                      styles.filterToggleText
+                    }
+                  >
+                    {t('services.sortAndFilters')}
                   </Text>
+
                   <ChevronDown
                     size={16}
                     color={C.navy}
                     style={{
                       transform: [
                         {
-                          rotate: filtersExpanded
-                            ? '180deg'
-                            : '0deg',
+                          rotate:
+                            filtersExpanded
+                              ? '180deg'
+                              : '0deg',
                         },
                       ],
                     }}
                   />
                 </Pressable>
 
-                <Text style={styles.resultCount}>
-                  {visibleServices.length} records
+                <Text
+                  style={styles.resultCount}
+                >
+                  {t('services.recordCount', {
+                    count:
+                      visibleServices.length,
+                  })}
                 </Text>
               </View>
 
-              {/* FILTER OPTIONS */}
               {filtersExpanded && (
-                <View style={styles.filtersPanel}>
+                <View
+                  style={styles.filtersPanel}
+                >
                   <ScrollView
                     horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.sortRow}
+                    showsHorizontalScrollIndicator={
+                      false
+                    }
+                    contentContainerStyle={
+                      styles.sortRow
+                    }
                   >
-                    {SORT_OPTIONS.map((option) => (
-                      <Pressable
-                        key={option.value}
-                        onPress={() =>
-                          setSortOrder(option.value)
-                        }
-                        style={[
-                          styles.sortChip,
-                          sortOrder === option.value &&
-                            styles.sortChipActive,
-                        ]}
-                      >
-                        <Text
+                    {SORT_OPTIONS.map(
+                      (option) => (
+                        <Pressable
+                          key={option.value}
+                          onPress={() =>
+                            setSortOrder(
+                              option.value,
+                            )
+                          }
                           style={[
-                            styles.sortChipText,
-                            sortOrder === option.value &&
-                              styles.sortChipTextActive,
+                            styles.sortChip,
+                            sortOrder ===
+                              option.value &&
+                              styles.sortChipActive,
                           ]}
                         >
-                          {option.label}
-                        </Text>
-                      </Pressable>
-                    ))}
+                          <Text
+                            style={[
+                              styles.sortChipText,
+                              sortOrder ===
+                                option.value &&
+                                styles.sortChipTextActive,
+                            ]}
+                          >
+                            {t(
+                              `services.${option.key}`,
+                            )}
+                          </Text>
+                        </Pressable>
+                      ),
+                    )}
                   </ScrollView>
 
-                  <View style={styles.filterBottom}>
+                  <View
+                    style={styles.filterBottom}
+                  >
                     <Pressable
-                      style={styles.checkboxRow}
+                      style={
+                        styles.checkboxRow
+                      }
                       onPress={() =>
-                        setShowCosts(!showCosts)
+                        setShowCosts(
+                          !showCosts,
+                        )
                       }
                     >
                       <View
@@ -646,60 +824,104 @@ export default function ServicesScreen() {
                         )}
                       </View>
 
-                      <Text style={styles.checkboxLabel}>
-                        Show costs
+                      <Text
+                        style={
+                          styles.checkboxLabel
+                        }
+                      >
+                        {t('services.showCosts')}
                       </Text>
                     </Pressable>
 
                     <Pressable
                       onPress={resetFilters}
                     >
-                      <Text style={styles.resetText}>
-                        Reset filters
+                      <Text
+                        style={styles.resetText}
+                      >
+                        {t(
+                          'services.resetFilters',
+                        )}
                       </Text>
                     </Pressable>
                   </View>
                 </View>
               )}
 
-              {/* LIST HEADING */}
-              <View style={styles.sectionHeading}>
-                <Text style={styles.sectionTitle}>
-                  Recent Services
+              <View
+                style={styles.sectionHeading}
+              >
+                <Text
+                  style={styles.sectionTitle}
+                >
+                  {t(
+                    'services.recentServices',
+                  )}
                 </Text>
 
-                <View style={styles.sectionBadge}>
-                  <Text style={styles.sectionBadgeText}>
+                <View
+                  style={styles.sectionBadge}
+                >
+                  <Text
+                    style={
+                      styles.sectionBadgeText
+                    }
+                  >
                     {visibleServices.length}
                   </Text>
                 </View>
               </View>
 
               {isLoadingServices && (
-                <View style={styles.statusCard}>
+                <View
+                  style={styles.statusCard}
+                >
                   <ActivityIndicator
                     color={C.blue}
                   />
-                  <Text style={styles.statusText}>
-                    Loading services...
+
+                  <Text
+                    style={styles.statusText}
+                  >
+                    {t(
+                      'services.loadingServices',
+                    )}
                   </Text>
                 </View>
               )}
 
               {isServicesError && (
-                <View style={styles.statusCard}>
-                  <Text style={styles.emptyTitle}>
-                    Could not load services
+                <View
+                  style={styles.statusCard}
+                >
+                  <Text
+                    style={styles.emptyTitle}
+                  >
+                    {t(
+                      'services.servicesUnavailable',
+                    )}
                   </Text>
-                  <Text style={styles.emptyText}>
-                    Please check your connection.
+
+                  <Text
+                    style={styles.emptyText}
+                  >
+                    {t(
+                      'services.connectionError',
+                    )}
                   </Text>
+
                   <Pressable
-                    style={styles.yellowButton}
+                    style={
+                      styles.yellowButton
+                    }
                     onPress={retry}
                   >
-                    <Text style={styles.yellowButtonText}>
-                      Try again
+                    <Text
+                      style={
+                        styles.yellowButtonText
+                      }
+                    >
+                      {t('common.retry')}
                     </Text>
                   </Pressable>
                 </View>
@@ -710,39 +932,62 @@ export default function ServicesScreen() {
             <ServiceCard
               service={item}
               showCosts={showCosts}
-              onPress={() => openService(item)}
+              language={language}
+              onPress={() =>
+                openService(item)
+              }
             />
           )}
           ListEmptyComponent={
-            !isLoadingServices && !isServicesError ? (
-              <View style={styles.emptyCard}>
-                <View style={styles.emptyIconCircle}>
+            !isLoadingServices &&
+            !isServicesError ? (
+              <View
+                style={styles.emptyCard}
+              >
+                <View
+                  style={
+                    styles.emptyIconCircle
+                  }
+                >
                   <Wrench
                     size={32}
                     color={C.blue}
                   />
                 </View>
 
-                <Text style={styles.emptyTitle}>
+                <Text
+                  style={styles.emptyTitle}
+                >
                   {searchQuery.trim()
-                    ? 'No matching services'
-                    : 'No services yet'}
+                    ? t(
+                        'services.noResults',
+                      )
+                    : t(
+                        'services.noServices',
+                      )}
                 </Text>
 
-                <Text style={styles.emptyText}>
+                <Text
+                  style={styles.emptyText}
+                >
                   {searchQuery.trim()
-                    ? 'Try another search or reset your filters.'
-                    : 'Add your first service to start tracking your car maintenance.'}
+                    ? t(
+                        'services.noResultsDescription',
+                      )
+                    : t(
+                        'services.noServicesDescription',
+                      )}
                 </Text>
               </View>
             ) : null
           }
           ListFooterComponent={
-            <View style={styles.footerSpace} />
+            <View
+              style={styles.footerSpace}
+            />
           }
         />
 
-        {/* FIXED ADD BUTTON */}
         <View style={styles.bottomBar}>
           <Pressable
             style={styles.addButton}
@@ -754,8 +999,10 @@ export default function ServicesScreen() {
               strokeWidth={2.5}
             />
 
-            <Text style={styles.addButtonText}>
-              Add Service
+            <Text
+              style={styles.addButtonText}
+            >
+              {t('services.addService')}
             </Text>
           </Pressable>
         </View>
@@ -767,13 +1014,17 @@ export default function ServicesScreen() {
 function ServiceCard({
   service,
   showCosts,
+  language,
   onPress,
 }: {
   service: ServiceListItem;
   showCosts: boolean;
+  language: string;
   onPress: () => void;
 }) {
-  const type = getServiceIcon(service.title);
+  const type = getServiceIcon(
+    service.title,
+  );
 
   return (
     <Pressable
@@ -803,7 +1054,9 @@ function ServiceCard({
         </View>
 
         <View style={styles.serviceMain}>
-          <Text style={styles.serviceTitle}>
+          <Text
+            style={styles.serviceTitle}
+          >
             {service.title}
           </Text>
 
@@ -812,8 +1065,16 @@ function ServiceCard({
               size={13}
               color={C.muted}
             />
-            <Text style={styles.serviceMetaText}>
-              {formatDate(service.date)}
+
+            <Text
+              style={
+                styles.serviceMetaText
+              }
+            >
+              {formatDate(
+                service.date,
+                language,
+              )}
             </Text>
           </View>
         </View>
@@ -824,24 +1085,46 @@ function ServiceCard({
         />
       </View>
 
-      <View style={styles.serviceDivider} />
+      <View
+        style={styles.serviceDivider}
+      />
 
-      <View style={styles.serviceBottom}>
-        <View style={styles.serviceBottomLeft}>
-          <View style={styles.metaPill}>
+      <View
+        style={styles.serviceBottom}
+      >
+        <View
+          style={
+            styles.serviceBottomLeft
+          }
+        >
+          <View
+            style={styles.metaPill}
+          >
             <Gauge
               size={15}
               color={C.blue}
             />
 
-            <Text style={styles.metaPillText}>
-              {formatNumber(service.mileage)} km
+            <Text
+              style={
+                styles.metaPillText
+              }
+            >
+              {formatNumber(
+                service.mileage,
+                language,
+              )}{' '}
+              {language.startsWith('ru')
+                ? 'км'
+                : 'km'}
             </Text>
           </View>
 
           {service.workshop ? (
             <Text
-              style={styles.workshopText}
+              style={
+                styles.workshopText
+              }
               numberOfLines={1}
             >
               {service.workshop}
@@ -850,11 +1133,25 @@ function ServiceCard({
         </View>
 
         {showCosts && (
-          <View style={styles.costContainer}>
-            <Text style={styles.costValue}>
-              {formatMoney(service.cost)}
+          <View
+            style={
+              styles.serviceCostContainer
+            }
+          >
+            <Text
+              style={styles.serviceCost}
+            >
+              {formatMoney(
+                service.cost,
+                language,
+              )}
             </Text>
-            <Text style={styles.costCurrency}>
+
+            <Text
+              style={
+                styles.serviceCurrency
+              }
+            >
               {service.currency || ''}
             </Text>
           </View>
@@ -869,334 +1166,298 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: C.sky,
   },
-
   background: {
     flex: 1,
     width: '100%',
   },
-
+  center: {
+    flex: 1,
+    backgroundColor: C.sky,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
   listContent: {
-    paddingHorizontal: 18,
-    paddingTop: 22,
+    paddingHorizontal: 16,
+    paddingTop: 26,
     paddingBottom: 20,
   },
-
   heading: {
     marginBottom: 22,
   },
-
   pageTitle: {
     fontSize: 30,
-    fontWeight: '900',
+    fontWeight: '800',
     color: C.navy,
     letterSpacing: -0.8,
   },
-
   pageSubtitle: {
     fontSize: 14,
-    color: '#41658E',
+    color: '#f00303',
     marginTop: 5,
   },
-
   vehicleCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 15,
+    borderRadius: 22,
     backgroundColor: '#FFFFFFF2',
-    borderRadius: 20,
-    padding: 14,
-    marginBottom: 14,
-    gap: 12,
+    borderWidth: 1,
+    borderColor: C.white,
+    marginBottom: 15,
     shadowColor: '#2D70A4',
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.07,
     shadowRadius: 12,
     elevation: 2,
   },
-
   vehicleIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
+    width: 54,
+    height: 54,
+    borderRadius: 17,
     backgroundColor: '#FFDC60',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 12,
   },
-
   vehicleInfo: {
     flex: 1,
   },
-
   vehicleName: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
     color: C.navy,
   },
-
   vehicleDetails: {
     fontSize: 12,
     color: C.muted,
-    marginTop: 4,
+    marginTop: 5,
   },
-
   vehicleMileage: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
   },
-
   vehicleMileageText: {
     fontSize: 12,
-    fontWeight: '800',
-    color: C.navy,
+    fontWeight: '700',
+    color: C.blue,
   },
-
   carSelector: {
+    flexDirection: 'row',
     gap: 8,
-    paddingBottom: 14,
+    paddingBottom: 15,
   },
-
   carChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 20,
     backgroundColor: '#FFFFFFE8',
     borderWidth: 1,
     borderColor: C.border,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-
   carChipActive: {
-    backgroundColor: C.yellow,
+    backgroundColor: C.yellowLight,
     borderColor: '#EAB800',
   },
-
   carChipText: {
-    color: C.muted,
     fontSize: 12,
+    color: C.muted,
     fontWeight: '700',
   },
-
   carChipTextActive: {
     color: C.navy,
   },
-
   summaryRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 22,
+    marginBottom: 20,
   },
-
   summaryCard: {
     flex: 1,
+    minWidth: 0,
+    borderRadius: 22,
+    padding: 17,
     backgroundColor: '#FFFFFFF0',
-    borderRadius: 20,
-    padding: 16,
-    minHeight: 135,
-    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: C.white,
   },
-
   summaryIconBlue: {
-    width: 35,
-    height: 35,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     backgroundColor: '#E3F2FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
-
   summaryIconYellow: {
-    width: 35,
-    height: 35,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     backgroundColor: '#FFF1B7',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
-
   summaryNumber: {
-    fontSize: 23,
-    fontWeight: '900',
+    fontSize: 25,
+    fontWeight: '800',
     color: C.navy,
-    letterSpacing: -0.5,
   },
-
   summaryLabel: {
     fontSize: 12,
     color: C.muted,
-    marginTop: 4,
+    marginTop: 5,
+    fontWeight: '600',
   },
-
   searchContainer: {
-    height: 52,
-    backgroundColor: '#FFFFFFF5',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: C.border,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 11,
+    borderRadius: 17,
     paddingHorizontal: 15,
-    gap: 10,
-    marginBottom: 18,
+    backgroundColor: '#FFFFFFF5',
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 15,
   },
-
   searchInput: {
     flex: 1,
-    height: '100%',
-    color: C.navy,
+    paddingVertical: 15,
     fontSize: 14,
-    outlineStyle: 'none',
-  } as any,
-
+    color: C.navy,
+  },
   filterHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-
   filterToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 5,
+    paddingVertical: 7,
   },
-
   filterToggleText: {
     fontSize: 14,
     fontWeight: '800',
     color: C.navy,
   },
-
   resultCount: {
     fontSize: 12,
+    fontWeight: '600',
     color: C.muted,
   },
-
   filtersPanel: {
+    borderRadius: 19,
     backgroundColor: '#FFFFFFE8',
-    borderRadius: 18,
-    paddingVertical: 14,
-    marginBottom: 12,
-  },
-
-  sortRow: {
-    paddingHorizontal: 12,
-    gap: 8,
-  },
-
-  sortChip: {
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    backgroundColor: '#F1F7FC',
     borderWidth: 1,
     borderColor: C.border,
+    padding: 13,
+    marginBottom: 17,
   },
-
+  sortRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 14,
+  },
+  sortChip: {
+    backgroundColor: '#F1F7FC',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
   sortChipActive: {
     backgroundColor: C.yellowLight,
-    borderColor: C.yellow,
+    borderColor: '#E4B400',
   },
-
   sortChipText: {
     fontSize: 12,
-    color: C.muted,
     fontWeight: '700',
+    color: C.muted,
   },
-
   sortChipTextActive: {
     color: C.navy,
   },
-
   filterBottom: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 15,
-    paddingTop: 16,
   },
-
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-
   checkbox: {
     width: 19,
     height: 19,
-    borderRadius: 5,
+    borderRadius: 6,
     borderWidth: 1.5,
     borderColor: '#8CAAC5',
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
   },
-
   checkboxActive: {
     backgroundColor: C.yellow,
     borderColor: '#E4B400',
   },
-
   checkboxLabel: {
+    fontSize: 12,
+    fontWeight: '700',
     color: C.navy,
-    fontSize: 12,
-    fontWeight: '700',
   },
-
   resetText: {
-    color: C.blue,
     fontSize: 12,
     fontWeight: '700',
+    color: C.blue,
   },
-
   sectionHeading: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
+    gap: 8,
     marginTop: 8,
-    marginBottom: 14,
+    marginBottom: 13,
   },
-
   sectionTitle: {
-    fontSize: 19,
-    fontWeight: '900',
+    fontSize: 20,
+    fontWeight: '800',
     color: C.navy,
   },
-
   sectionBadge: {
+    borderRadius: 10,
     backgroundColor: '#D7ECFC',
     paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 10,
+    paddingVertical: 4,
   },
-
   sectionBadgeText: {
-    color: C.blue,
     fontSize: 12,
     fontWeight: '800',
+    color: C.blue,
   },
-
   serviceCard: {
     backgroundColor: '#FFFFFFF5',
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: C.white,
     shadowColor: '#2D70A4',
-    shadowOpacity: 0.045,
-    shadowRadius: 8,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
     elevation: 1,
   },
-
   cardPressed: {
-    opacity: 0.85,
+    opacity: 0.8,
   },
-
   serviceTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-
   serviceIcon: {
     width: 46,
     height: 46,
@@ -1205,186 +1466,155 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   serviceIconYellow: {
     backgroundColor: '#FFF0B8',
   },
-
   serviceMain: {
     flex: 1,
   },
-
   serviceTitle: {
     fontSize: 15,
     fontWeight: '800',
     color: C.navy,
-    lineHeight: 21,
   },
-
   serviceMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginTop: 7,
+    marginTop: 6,
   },
-
   serviceMetaText: {
-    color: C.muted,
     fontSize: 12,
+    color: C.muted,
   },
-
   serviceDivider: {
     height: 1,
     backgroundColor: '#EAF1F7',
-    marginVertical: 13,
+    marginVertical: 14,
   },
-
   serviceBottom: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
   },
-
   serviceBottomLeft: {
     flex: 1,
-    gap: 6,
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-
   metaPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: '#EFF7FF',
-    borderRadius: 10,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
-
   metaPillText: {
     fontSize: 12,
-    color: C.navy,
     fontWeight: '700',
+    color: C.navy,
   },
-
   workshopText: {
+    flex: 1,
     fontSize: 12,
     color: C.muted,
-    maxWidth: '100%',
   },
-
-  costContainer: {
+  serviceCostContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 4,
   },
-
-  costValue: {
+  serviceCost: {
     fontSize: 17,
-    fontWeight: '900',
+    fontWeight: '800',
     color: C.navy,
   },
-
-  costCurrency: {
+  serviceCurrency: {
     fontSize: 11,
     fontWeight: '700',
     color: C.muted,
   },
-
   bottomBar: {
     backgroundColor: '#FFFFFFF0',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 12,
+    paddingBottom: 18,
     borderTopWidth: 1,
     borderTopColor: '#E1EDF7',
   },
-
   addButton: {
-    height: 52,
-    borderRadius: 16,
     backgroundColor: C.yellow,
+    borderRadius: 17,
+    paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 9,
   },
-
   addButtonText: {
-    fontSize: 15,
-    fontWeight: '900',
+    fontSize: 16,
+    fontWeight: '800',
     color: C.navy,
   },
-
-  emptyCard: {
+  statusCard: {
+    borderRadius: 19,
+    padding: 24,
     backgroundColor: '#FFFFFFE8',
-    borderRadius: 20,
     alignItems: 'center',
-    padding: 28,
-    gap: 10,
+    marginBottom: 16,
   },
-
+  statusText: {
+    fontSize: 14,
+    color: C.muted,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  emptyCard: {
+    borderRadius: 22,
+    padding: 28,
+    backgroundColor: '#FFFFFFE8',
+    alignItems: 'center',
+    marginTop: 6,
+  },
   emptyIconCircle: {
     width: 64,
     height: 64,
-    borderRadius: 32,
+    borderRadius: 20,
     backgroundColor: '#E5F3FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 5,
+    marginBottom: 15,
   },
-
   emptyTitle: {
-    fontSize: 17,
+    fontSize: 19,
     fontWeight: '800',
     color: C.navy,
     textAlign: 'center',
   },
-
   emptyText: {
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 21,
     color: C.muted,
     textAlign: 'center',
-    lineHeight: 20,
+    marginTop: 9,
   },
-
-  statusCard: {
-    backgroundColor: '#FFFFFFE8',
-    borderRadius: 20,
-    padding: 25,
-    alignItems: 'center',
-    gap: 12,
-  },
-
-  statusText: {
-    color: C.muted,
-    fontSize: 13,
-    marginTop: 8,
-  },
-
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: C.sky,
-    padding: 24,
-  },
-
   yellowButton: {
     backgroundColor: C.yellow,
-    borderRadius: 14,
-    paddingHorizontal: 25,
+    borderRadius: 15,
+    paddingHorizontal: 23,
     paddingVertical: 13,
-    marginTop: 12,
+    marginTop: 18,
   },
-
   yellowButtonText: {
     color: C.navy,
+    fontSize: 14,
     fontWeight: '800',
   },
-
   footerSpace: {
-    height: 12,
+    height: 20,
   },
 });

@@ -10,93 +10,165 @@ const supportedCurrencies = [
   'RUB',
 ] as const;
 
-export const serviceSchema = z.object({
-  date: z
-    .string()
-    .trim()
-    .min(1, 'Service date is required')
-    .refine((value) => {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        return false;
-      }
+export type ServiceValidationMessageKey =
+  | 'dateRequired'
+  | 'dateInvalid'
+  | 'mileageRequired'
+  | 'mileageDigits'
+  | 'mileageInvalid'
+  | 'mileageTooHigh'
+  | 'serviceRequired'
+  | 'serviceTooLong'
+  | 'costRequired'
+  | 'costInvalid'
+  | 'costNegative'
+  | 'costTooHigh'
+  | 'currencyInvalid'
+  | 'workshopTooLong';
 
-      const parsed = new Date(`${value}T00:00:00.000Z`);
+type TranslateValidation = (
+  key: ServiceValidationMessageKey,
+) => string;
 
-      return (
-        !Number.isNaN(parsed.getTime()) &&
-        parsed.toISOString().slice(0, 10) === value
-      );
-    }, 'Enter a valid date in YYYY-MM-DD format'),
+const englishValidation: Record<
+  ServiceValidationMessageKey,
+  string
+> = {
+  dateRequired: 'Service date is required',
+  dateInvalid: 'Enter a valid date in YYYY-MM-DD format',
+  mileageRequired: 'Mileage is required',
+  mileageDigits: 'Mileage must contain only digits',
+  mileageInvalid: 'Enter a valid mileage',
+  mileageTooHigh: 'Mileage is too high',
+  serviceRequired: 'Service name is required',
+  serviceTooLong: 'Service name is too long',
+  costRequired: 'Service cost is required',
+  costInvalid: 'Enter a valid amount, e.g. 120 or 120.50',
+  costNegative: 'Cost cannot be negative',
+  costTooHigh: 'Cost is too high',
+  currencyInvalid: 'Select a supported currency',
+  workshopTooLong: 'Workshop name is too long',
+};
 
-  mileage: z
-    .string()
-    .trim()
-    .min(1, 'Mileage is required')
-    .regex(/^\d+$/, 'Mileage must contain only digits')
-    .refine(
-      (value) => Number.isSafeInteger(Number(value)),
-      'Enter a valid mileage',
-    )
-    .refine(
-      (value) => Number(value) <= 10_000_000,
-      'Mileage is too high',
-    ),
+const defaultTranslate: TranslateValidation = (key) =>
+  englishValidation[key];
 
-  serviceName: z
-    .string()
-    .trim()
-    .min(1, 'Service name is required')
-    .max(150, 'Service name is too long'),
+export function createServiceSchema(
+  translate: TranslateValidation = defaultTranslate,
+) {
+  return z.object({
+    date: z
+      .string()
+      .trim()
+      .min(1, translate('dateRequired'))
+      .refine((value) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+          return false;
+        }
 
-  totalCost: z
-    .string()
-    .trim()
-    .min(1, 'Service cost is required')
-    .regex(
-      /^\d+(?:[.,]\d{1,2})?$/,
-      'Enter a valid amount, e.g. 120 or 120.50',
-    )
-    .refine(
-      (value) => {
-        const amount = Number(value.replace(',', '.'));
+        const parsed = new Date(
+          `${value}T00:00:00.000Z`,
+        );
 
-        return Number.isFinite(amount) && amount >= 0;
-      },
-      'Cost cannot be negative',
-    )
-    .refine(
-      (value) =>
-        Number.isFinite(Number(value.replace(',', '.'))) &&
-        Number(value.replace(',', '.')) <= 1_000_000_000,
-      'Cost is too high',
-    ),
+        return (
+          !Number.isNaN(parsed.getTime()) &&
+          parsed.toISOString().slice(0, 10) === value
+        );
+      }, translate('dateInvalid')),
 
-  currency: z.enum(supportedCurrencies, {
-    message: 'Select a supported currency',
-  }),
+    mileage: z
+      .string()
+      .trim()
+      .min(1, translate('mileageRequired'))
+      .regex(
+        /^\d+$/,
+        translate('mileageDigits'),
+      )
+      .refine(
+        (value) =>
+          Number.isSafeInteger(Number(value)),
+        translate('mileageInvalid'),
+      )
+      .refine(
+        (value) => Number(value) <= 10_000_000,
+        translate('mileageTooHigh'),
+      ),
 
-  workshop: z
-    .string()
-    .trim()
-    .max(150, 'Workshop name is too long'),
-});
+    serviceName: z
+      .string()
+      .trim()
+      .min(1, translate('serviceRequired'))
+      .max(150, translate('serviceTooLong')),
+
+    totalCost: z
+      .string()
+      .trim()
+      .min(1, translate('costRequired'))
+      .regex(
+        /^\d+(?:[.,]\d{1,2})?$/,
+        translate('costInvalid'),
+      )
+      .refine((value) => {
+        const amount = Number(
+          value.replace(',', '.'),
+        );
+
+        return (
+          Number.isFinite(amount) &&
+          amount >= 0
+        );
+      }, translate('costNegative'))
+      .refine(
+        (value) => {
+          const amount = Number(
+            value.replace(',', '.'),
+          );
+
+          return (
+            Number.isFinite(amount) &&
+            amount <= 1_000_000_000
+          );
+        },
+        translate('costTooHigh'),
+      ),
+
+    currency: z.enum(supportedCurrencies, {
+      message: translate('currencyInvalid'),
+    }),
+
+    workshop: z
+      .string()
+      .trim()
+      .max(150, translate('workshopTooLong')),
+  });
+}
+
+// Retain the original export for other code
+// that already imports serviceSchema.
+export const serviceSchema = createServiceSchema();
 
 export type ServiceFormValues = z.infer<
   typeof serviceSchema
 >;
 
-export const supportedCurrencyOptions = supportedCurrencies.map(
-  (currency) => ({
+export const supportedCurrencyOptions =
+  supportedCurrencies.map((currency) => ({
     label: currency,
     value: currency,
-  }),
-);
+  }));
 
 export function getLocalDateString(): string {
   const now = new Date();
+
   const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
+
+  const month = String(
+    now.getMonth() + 1,
+  ).padStart(2, '0');
+
+  const day = String(
+    now.getDate(),
+  ).padStart(2, '0');
 
   return `${year}-${month}-${day}`;
 }
