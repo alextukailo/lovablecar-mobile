@@ -19,6 +19,7 @@ const en = {
         cars: 'Cars',
         services: 'Service',
         more: 'More',
+        reminders: 'Reminders',
     },
 
     more: {
@@ -41,6 +42,29 @@ const en = {
         russian: 'Russian',
         savedAutomatically:
             'Your language preference is saved automatically.',
+    },
+
+    reminders: {
+        "title": "Reminders",
+        "subtitle": "Keep track of important things. We'll remind you in Telegram.",
+        "upcoming": "Upcoming",
+        "completed": "Completed",
+        "add": "Add Reminder",
+        "loading": "Loading reminders...",
+        "loadError": "Unable to load reminders",
+        "tryAgain": "Try again",
+        "emptyTitle": "No reminders yet",
+        "emptyDescription": "Create a reminder and we'll notify you through Telegram.",
+        "upcomingTitle": "Upcoming Reminders",
+        "noUpcoming": "No upcoming reminders",
+        "history": "History",
+        "telegramTitle": "Telegram Notifications",
+        "telegramDescription": "Reminders are sent through your connected Telegram account.",
+        "deleteTitle": "Delete reminder?",
+        "deleteDescription": "This reminder will be permanently deleted.",
+        "delete": "Delete",
+        "cancel": "Cancel",
+        "deleteError": "Unable to delete reminder"
     },
 
     home: {

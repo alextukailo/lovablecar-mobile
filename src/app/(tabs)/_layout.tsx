@@ -1,4 +1,4 @@
-import { COLORS, styles } from '@/app/(tabs)/_layout.styles';
+import { COLORS, styles } from '@/shared/styles/_layout.styles';
 
 import { Redirect, Tabs, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -475,6 +475,17 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="reminders"
+        options={{
+          ...tabOptions(
+            t('navigation.reminders'),
+            Bell,
+          ),
+          headerShown: false,
+        }}
+      />
+
+      <Tabs.Screen
         name="more"
         options={{
           ...tabOptions(t('navigation.more'), Ellipsis),
@@ -483,19 +494,11 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
-        name="reminders"
-        options={{
-          href: null,
-        }}
-      />
-
-      <Tabs.Screen
         name="settings"
         options={{
-          href: null,
+          headerShown: false,
         }}
       />
-
     </Tabs>
   </ProfileMenuProvider>
 

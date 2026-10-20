@@ -19,6 +19,7 @@ const ru = {
         cars: 'Авто',
         services: 'Сервис',
         more: 'Ещё',
+        reminders: 'Напоминания',
     },
 
     more: {
@@ -552,6 +553,29 @@ const ru = {
         title: 'Мой профиль',
         logout: 'Выйти',
     },
+
+    reminders: {
+        "title": "Напоминания",
+        "subtitle": "Не забывайте о важных делах. Мы напомним вам о них в Telegram.",
+        "upcoming": "Предстоящие",
+        "completed": "Выполнено",
+        "add": "Добавить напоминание",
+        "loading": "Загрузка напоминаний...",
+        "loadError": "Не удалось загрузить напоминания",
+        "tryAgain": "Повторить",
+        "emptyTitle": "Пока нет напоминаний",
+        "emptyDescription": "Создайте напоминание, и мы отправим уведомление в Telegram.",
+        "upcomingTitle": "Предстоящие напоминания",
+        "noUpcoming": "Нет предстоящих напоминаний",
+        "history": "История",
+        "telegramTitle": "Уведомления Telegram",
+        "telegramDescription": "Напоминания отправляются через подключённый аккаунт Telegram.",
+        "deleteTitle": "Удалить напоминание?",
+        "deleteDescription": "Это напоминание будет удалено без возможности восстановления.",
+        "delete": "Удалить",
+        "cancel": "Отмена",
+        "deleteError": "Не удалось удалить напоминание"
+    }
 } as const;
 
 export default ru;

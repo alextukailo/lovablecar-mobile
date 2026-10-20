@@ -1,8 +1,6 @@
 
-import { AuthProvider } from '@/features/auth/model/AuthContext';
-import AppSplashScreen from '@/shared/ui/AppSplashScreen';
-import { restoreLanguage } from '@/i18n';
 
+import { AuthProvider } from '@/features/auth/model/AuthContext';
 import {
     QueryClient,
     QueryClientProvider,
@@ -11,16 +9,13 @@ import {
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
-import {
-    StyleSheet,
-    View
-} from 'react-native';
+import { useEffect, useState } from 'react';
 
 import {
-    useCallback,
-    useEffect,
-    useState,
-} from 'react';
+    ImageBackground,
+    StyleSheet,
+    View,
+} from 'react-native';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,68 +26,50 @@ const queryClient = new QueryClient({
   },
 });
 
+const startupImage = require(
+  '../../assets/images/lovablecar-main-background.png'
+);
+
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // Native splash may already be hidden.
+});
+
 export default function RootLayout() {
-  const [nativeSplashHidden, setNativeSplashHidden] =
-    useState(false);
+  const [imageReady, setImageReady] = useState(false);
 
-  const [languageReady, setLanguageReady] =
-    useState(false);
-
-  // Restore the saved language before showing the app.
   useEffect(() => {
-    let mounted = true;
-
-    restoreLanguage()
-      .catch((error) => {
-        console.warn(
-          '[i18n] Language initialization failed:',
-          error,
-        );
-      })
-      .finally(() => {
-        if (mounted) {
-          setLanguageReady(true);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
+    // The image is bundled locally, so no prefetch is required.
+    setImageReady(true);
   }, []);
 
-  // Hide native splash only after language initialization.
-  const handleLayout = useCallback(() => {
-    if (nativeSplashHidden || !languageReady) {
-      return;
-    }
-
-    setNativeSplashHidden(true);
-
-    void SplashScreen.hideAsync().catch(() => {
-      // Native splash may already be hidden.
-    });
-  }, [nativeSplashHidden, languageReady]);
-
-  // Handle the case where layout finishes before
-  // the saved language has been restored.
   useEffect(() => {
-    if (languageReady && !nativeSplashHidden) {
-      handleLayout();
+    if (imageReady) {
+      SplashScreen.hideAsync().catch(() => {
+        // Native splash may already be hidden.
+      });
     }
-  }, [
-    languageReady,
-    nativeSplashHidden,
-    handleLayout,
-  ]);
+  }, [imageReady]);
 
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <View
-          style={styles.container}
-          onLayout={handleLayout}
-        >
-          <Stack>
+        <View style={styles.container}>
+          <Stack
+            screenOptions={{
+              headerBackTitle: 'Back',
+              headerTintColor: '#102647',
+              headerStyle: {
+                backgroundColor: '#FFFFFF',
+              },
+              headerTitleStyle: {
+                fontWeight: '700',
+              },
+              contentStyle: {
+                backgroundColor: '#EAF6FF',
+              },
+            }}
+          >
+            {/* Authentication */}
             <Stack.Screen
               name="login"
               options={{
@@ -100,6 +77,7 @@ export default function RootLayout() {
               }}
             />
 
+            {/* Initial redirect */}
             <Stack.Screen
               name="index"
               options={{
@@ -107,6 +85,7 @@ export default function RootLayout() {
               }}
             />
 
+            {/* Main tabs */}
             <Stack.Screen
               name="(tabs)"
               options={{
@@ -114,6 +93,29 @@ export default function RootLayout() {
               }}
             />
 
+            {/* Cars */}
+            <Stack.Screen
+              name="car/new"
+              options={{
+                title: 'Add car',
+              }}
+            />
+
+            <Stack.Screen
+              name="car/[id]"
+              options={{
+                title: 'Car',
+              }}
+            />
+
+            <Stack.Screen
+              name="car/edit"
+              options={{
+                title: 'Edit car',
+              }}
+            />
+
+            {/* Services */}
             <Stack.Screen
               name="service/new"
               options={{
@@ -121,6 +123,40 @@ export default function RootLayout() {
               }}
             />
 
+            <Stack.Screen
+              name="service/[id]"
+              options={{
+                title: 'Service details',
+              }}
+            />
+
+            <Stack.Screen
+              name="service/edit"
+              options={{
+                title: 'Edit service',
+              }}
+            />
+
+            {/* Reminders - FSD */}
+            <Stack.Screen
+              name="reminder/new"
+              options={{
+                headerShown: false,
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+
+            <Stack.Screen
+              name="reminder/[id]"
+              options={{
+                headerShown: false,
+                presentation: 'card',
+                animation: 'slide_from_right',
+              }}
+            />
+
+            {/* Scanner */}
             <Stack.Screen
               name="scanner"
               options={{
@@ -135,49 +171,14 @@ export default function RootLayout() {
                 headerShown: false,
               }}
             />
-
-            <Stack.Screen
-              name="car/new"
-              options={{
-                title: 'Add car',
-              }}
-            />
-
-            <Stack.Screen
-              name="car/[id]"
-              options={{
-                title: 'Car',
-                headerShown: false,
-              }}
-            />
-
-            <Stack.Screen
-              name="car/edit"
-              options={{
-                title: 'Edit car',
-              }}
-            />
-
-            <Stack.Screen
-              name="service/[id]"
-              options={{ headerShown: false }}
-            />
-
-            <Stack.Screen
-              name="service/edit"
-              options={{
-                title: 'Edit service',
-              }}
-            />
           </Stack>
 
-          {(!nativeSplashHidden || !languageReady) && (
-            <View
-              pointerEvents="none"
-              style={styles.splashOverlay}
-            >
-              <AppSplashScreen />
-            </View>
+          {!imageReady && (
+            <ImageBackground
+              source={startupImage}
+              style={styles.startupBackground}
+              resizeMode="cover"
+            />
           )}
         </View>
       </AuthProvider>
@@ -188,12 +189,10 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#DDF2FF',
   },
 
-  splashOverlay: {
+  startupBackground: {
     ...StyleSheet.absoluteFill,
-    zIndex: 100,
     backgroundColor: '#DDF2FF',
   },
 });

@@ -1,41 +1,45 @@
 import { C, styles } from '@/pages/services/ui/services.styles';
 
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import {
     CalendarDays,
     CarFront,
     Check,
     ChevronDown,
-    ChevronRight,
     CircleDollarSign,
     Gauge,
+    Pencil,
     Plus,
     Search,
     SlidersHorizontal,
+    Trash2,
     Wrench,
-    X,
+    X
 } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
     ImageBackground,
+    Modal,
     Pressable,
     ScrollView,
+    StyleSheet,
     Text,
     TextInput,
     View,
 } from 'react-native';
 
 import { api } from '@/../lib/api';
-import { useCars } from '@/features/cars/model/useCars';
 import { useCarStore } from '@/entities/car/model/car.store';
 import {
     useServiceStore,
     type ServiceSortOrder,
 } from '@/entities/service/model/service.store';
+import { useCars } from '@/features/cars/model/useCars';
 
 
 
@@ -173,6 +177,10 @@ function getServiceIcon(title: string) {
 
 export default function ServicesScreen() {
   const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
+  const [deletingServiceId, setDeletingServiceId] = useState<string | null>(null);
+  const [actionService, setActionService] = useState<ServiceListItem | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const language = i18n.language;
 
@@ -355,6 +363,57 @@ export default function ServicesScreen() {
         vehicleId: service.carId,
       },
     });
+  };
+
+  const editService = (service: ServiceListItem) => {
+    selectCar(service.carId);
+
+    router.push({
+      pathname: '/service/edit',
+      params: {
+        id: service.id,
+        carId: service.carId,
+      },
+    });
+  };
+
+  const deleteService = async (service: ServiceListItem) => {
+    if (deletingServiceId !== null) return;
+
+    setDeletingServiceId(service.id);
+
+    try {
+      await api.delete(`/cars/${service.carId}/services/${service.id}`);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['cars', service.carId, 'services'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['cars'],
+        }),
+      ]);
+    } catch (error) {
+      Alert.alert(
+        t('services.deleteError', {
+          defaultValue: 'Unable to delete service',
+        }),
+        t('services.deleteErrorDescription', {
+          defaultValue: 'Please try again.',
+        }),
+      );
+    } finally {
+      setDeletingServiceId(null);
+    }
+  };
+
+  const showServiceActions = (service: ServiceListItem) => {
+    setConfirmingDelete(false);
+    setActionService(service);
+  };
+
+  const closeServiceActions = () => {
+    setActionService(null);
+    setConfirmingDelete(false);
   };
 
   const addService = () => {
@@ -923,9 +982,10 @@ export default function ServicesScreen() {
               service={item}
               showCosts={showCosts}
               language={language}
-              onPress={() =>
-                openService(item)
-              }
+              onPress={() => openService(item)}
+              onLongPress={() => showServiceActions(item)}
+              onMenuPress={() => showServiceActions(item)}
+              deleting={deletingServiceId === item.id}
             />
           )}
           ListEmptyComponent={
@@ -997,6 +1057,76 @@ export default function ServicesScreen() {
           </Pressable>
         </View>
       </ImageBackground>
+
+      <Modal
+        visible={actionService !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={closeServiceActions}
+      >
+        <View style={menuStyles.overlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeServiceActions} />
+          <View style={menuStyles.sheet}>
+            <View style={menuStyles.handle} />
+            <Text style={menuStyles.title} numberOfLines={2}>
+              {actionService?.title}
+            </Text>
+            {!confirmingDelete ? (
+              <>
+                <Pressable
+                  style={menuStyles.action}
+                  onPress={() => {
+                    const service = actionService;
+                    closeServiceActions();
+                    if (service) editService(service);
+                  }}
+                >
+                  <Pencil size={20} color={C.navy} />
+                  <Text style={menuStyles.actionText}>
+                    {t('common.edit', { defaultValue: language.startsWith('ru') ? 'Изменить' : 'Edit' })}
+                  </Text>
+                </Pressable>
+                <Pressable style={menuStyles.action} onPress={() => setConfirmingDelete(true)}>
+                  <Trash2 size={20} color="#C33C3C" />
+                  <Text style={[menuStyles.actionText, { color: '#C33C3C' }]}>
+                    {t('common.delete', { defaultValue: language.startsWith('ru') ? 'Удалить' : 'Delete' })}
+                  </Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={menuStyles.description}>
+                  {t('services.deleteServiceDescription', {
+                    defaultValue: language.startsWith('ru')
+                      ? 'Запись будет удалена без возможности восстановления.'
+                      : 'This service record will be permanently deleted.',
+                  })}
+                </Text>
+                <Pressable
+                  style={[menuStyles.action, { backgroundColor: '#FFF0F0' }]}
+                  disabled={deletingServiceId !== null}
+                  onPress={async () => {
+                    const service = actionService;
+                    if (!service) return;
+                    await deleteService(service);
+                    closeServiceActions();
+                  }}
+                >
+                  {deletingServiceId ? <ActivityIndicator color="#C33C3C" /> : <Trash2 size={20} color="#C33C3C" />}
+                  <Text style={[menuStyles.actionText, { color: '#C33C3C' }]}>
+                    {t('common.delete', { defaultValue: language.startsWith('ru') ? 'Удалить' : 'Delete' })}
+                  </Text>
+                </Pressable>
+              </>
+            )}
+            <Pressable style={menuStyles.cancel} onPress={closeServiceActions}>
+              <Text style={menuStyles.cancelText}>
+                {t('common.cancel', { defaultValue: language.startsWith('ru') ? 'Отмена' : 'Cancel' })}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1006,11 +1136,17 @@ function ServiceCard({
   showCosts,
   language,
   onPress,
+  onLongPress,
+  onMenuPress,
+  deleting = false,
 }: {
   service: ServiceListItem;
   showCosts: boolean;
   language: string;
   onPress: () => void;
+  onLongPress: () => void;
+  onMenuPress: () => void;
+  deleting?: boolean;
 }) {
   const type = getServiceIcon(
     service.title,
@@ -1023,6 +1159,11 @@ function ServiceCard({
         pressed && styles.cardPressed,
       ]}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={450}
+      disabled={deleting}
+      accessibilityRole="button"
+      accessibilityHint="Long press for edit and delete options"
     >
       <View style={styles.serviceTop}>
         <View
@@ -1068,11 +1209,6 @@ function ServiceCard({
             </Text>
           </View>
         </View>
-
-        <ChevronRight
-          size={20}
-          color="#86A3BF"
-        />
       </View>
 
       <View
@@ -1150,3 +1286,16 @@ function ServiceCard({
     </Pressable>
   );
 }
+
+const menuStyles = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(9,27,49,0.45)' },
+  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 42 },
+  handle: { width: 42, height: 5, borderRadius: 3, backgroundColor: '#D5E1EC', alignSelf: 'center', marginBottom: 18 },
+  title: { fontSize: 19, fontWeight: '800', color: '#102647', marginBottom: 18 },
+  action: { minHeight: 56, borderRadius: 14, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 14, backgroundColor: '#F2F8FD', marginBottom: 10 },
+  actionText: { color: '#102647', fontSize: 16, fontWeight: '700' },
+  description: { color: '#41668B', fontSize: 14, lineHeight: 21, marginBottom: 16 },
+  cancel: { minHeight: 50, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  cancelText: { color: '#41668B', fontSize: 15, fontWeight: '700' },
+  moreButton: { padding: 7, borderRadius: 12, backgroundColor: '#EAF6FF' },
+});
