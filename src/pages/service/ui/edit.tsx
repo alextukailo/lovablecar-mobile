@@ -1,5 +1,5 @@
-import { COLORS, styles } from '@/pages/service/ui/edit.styles';
 
+import { COLORS, styles } from '@/pages/service/ui/edit.styles';
 import { Ionicons } from '@expo/vector-icons';
 import {
     useMutation,
@@ -21,7 +21,6 @@ import {
 } from 'react-native';
 
 import { api } from '@/../lib/api';
-
 import ServiceForm from '@/features/services/ui/ServiceForm';
 
 import {
@@ -47,8 +46,6 @@ type Service = {
   maintenanceSchedule?: ServiceSchedule | null;
 };
 
-
-
 function getParam(
   value: string | string[] | undefined,
 ): string | undefined {
@@ -65,49 +62,27 @@ function getErrorMessage(error: unknown): string {
       error as {
         response?: {
           status?: number;
-          data?: {
-            message?: string | string[];
-          };
+          data?: { message?: string | string[] };
         };
       }
     ).response;
 
     const message = response?.data?.message;
-
-    if (Array.isArray(message)) {
-      return message.join('\n');
-    }
-
-    if (typeof message === 'string') {
-      return message;
-    }
-
-    if (response?.status) {
-      return `HTTP ${response.status}`;
-    }
+    if (Array.isArray(message)) return message.join('\n');
+    if (typeof message === 'string') return message;
+    if (response?.status) return `HTTP ${response.status}`;
   }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'Unknown error';
+  return error instanceof Error ? error.message : 'Unknown error';
 }
 
-function formValues(
-  service: Service,
-): ServiceFormValues {
+function formValues(service: Service): ServiceFormValues {
   const empty = createEmptyServiceFormValues();
-
   return {
     ...empty,
     date: service.date.slice(0, 10),
     mileage: String(service.mileage),
     serviceName: service.title,
-    totalCost:
-      service.cost == null
-        ? ''
-        : String(service.cost),
+    totalCost: service.cost == null ? '' : String(service.cost),
     currency:
       (service.currency as ServiceFormValues['currency']) ||
       empty.currency,
@@ -115,16 +90,13 @@ function formValues(
   };
 }
 
-function validateSchedule(
-  changes: ScheduleUpdate,
-): void {
-  if (!changes.enabled) {
-    return;
-  }
+function validateSchedule(changes: ScheduleUpdate): void {
+  if (!changes.enabled) return;
 
   const {
     intervalKm,
     intervalMonths,
+    nextDueDate,
     warningKm,
     warningDays,
   } = changes;
@@ -136,7 +108,9 @@ function validateSchedule(
   if (
     !validInterval(intervalKm) ||
     !validInterval(intervalMonths) ||
-    (intervalKm === null && intervalMonths === null) ||
+    (intervalKm === null &&
+      intervalMonths === null &&
+      !nextDueDate) ||
     (intervalKm !== null && intervalKm > 1_000_000) ||
     (intervalMonths !== null && intervalMonths > 600)
   ) {
@@ -153,9 +127,7 @@ function validateSchedule(
     warningDays < 0 ||
     warningDays > 365
   ) {
-    throw new Error(
-      'Enter valid maintenance warning values.',
-    );
+    throw new Error('Enter valid maintenance warning values.');
   }
 }
 
@@ -168,73 +140,46 @@ export default function EditServiceScreen() {
   }>();
 
   const serviceId =
-    getParam(params.id) ??
-    getParam(params.serviceId);
-
+    getParam(params.id) ?? getParam(params.serviceId);
   const routeCarId =
-    getParam(params.carId) ??
-    getParam(params.vehicleId);
+    getParam(params.carId) ?? getParam(params.vehicleId);
 
   const queryClient = useQueryClient();
   const { i18n } = useTranslation();
-
-  const ru =
-    i18n.resolvedLanguage?.startsWith('ru') ??
-    false;
-
-  const tr = (english: string, russian: string) =>
-    ru ? russian : english;
+  const ru = i18n.resolvedLanguage?.startsWith('ru') ?? false;
+  const tr = (en: string, russian: string) => ru ? russian : en;
 
   const [scheduleChanges, setScheduleChanges] =
     useState<ScheduleUpdate | null>(null);
 
-  // LOAD SERVICE
-
   const serviceQuery = useQuery({
-    queryKey: [
-      'service',
-      'edit',
-      routeCarId,
-      serviceId,
-    ],
-
+    queryKey: ['service', 'edit', routeCarId, serviceId],
     enabled: Boolean(serviceId),
-
     queryFn: async (): Promise<Service> => {
-      if (!serviceId) {
-        throw new Error('Missing service ID');
-      }
+      if (!serviceId) throw new Error('Missing service ID');
 
       if (routeCarId) {
         const response = await api.get<Service>(
           `/cars/${encodeURIComponent(routeCarId)}/services/${encodeURIComponent(serviceId)}`,
         );
-
         return response.data;
       }
 
       const response = await api.get<Service>(
         `/service/${encodeURIComponent(serviceId)}`,
       );
-
       return response.data;
     },
   });
 
   const service = serviceQuery.data;
-
-  const carId =
-    service?.carId ??
-    routeCarId;
-
-  // UPDATE SERVICE AND LINKED SCHEDULE
+  const carId = service?.carId ?? routeCarId;
 
   const updateMutation = useMutation({
     mutationFn: async (values: ServiceFormValues) => {
       if (!carId || !serviceId) {
         throw new Error('Missing car or service ID');
       }
-
       if (!scheduleChanges) {
         throw new Error('Maintenance schedule state is not ready');
       }
@@ -248,11 +193,11 @@ export default function EditServiceScreen() {
         cost: values.totalCost.replace(',', '.'),
         currency: values.currency,
         workshop: values.workshop.trim(),
-
         maintenanceSchedule: {
           enabled: scheduleChanges.enabled,
           intervalKm: scheduleChanges.intervalKm,
           intervalMonths: scheduleChanges.intervalMonths,
+          nextDueDate: scheduleChanges.nextDueDate,
           warningKm: scheduleChanges.warningKm,
           warningDays: scheduleChanges.warningDays,
         },
@@ -268,33 +213,17 @@ export default function EditServiceScreen() {
         payload,
       );
 
-      console.log(
-        '[EditService] Saved response:',
-        JSON.stringify(response.data, null, 2),
-      );
-
       return response.data;
     },
 
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ['service'],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['services'],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['cars'],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['car'],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['maintenance'],
-        }),
+        queryClient.invalidateQueries({ queryKey: ['service'] }),
+        queryClient.invalidateQueries({ queryKey: ['services'] }),
+        queryClient.invalidateQueries({ queryKey: ['cars'] }),
+        queryClient.invalidateQueries({ queryKey: ['car'] }),
+        queryClient.invalidateQueries({ queryKey: ['maintenance'] }),
       ]);
-
       router.back();
     },
 
@@ -309,8 +238,6 @@ export default function EditServiceScreen() {
     },
   });
 
-  // MISSING ID
-
   if (!serviceId) {
     return (
       <View style={styles.center}>
@@ -319,14 +246,12 @@ export default function EditServiceScreen() {
           size={44}
           color={COLORS.blue}
         />
-
         <Text style={styles.errorTitle}>
           {tr(
             'Service information is missing',
             'Отсутствуют данные обслуживания',
           )}
         </Text>
-
         <Pressable
           style={styles.errorButton}
           onPress={() => router.back()}
@@ -339,8 +264,6 @@ export default function EditServiceScreen() {
     );
   }
 
-  // LOADING
-
   if (serviceQuery.isPending) {
     return (
       <View style={styles.center}>
@@ -348,7 +271,6 @@ export default function EditServiceScreen() {
           size="large"
           color={COLORS.navy}
         />
-
         <Text style={styles.loadingText}>
           {tr(
             'Loading service...',
@@ -359,8 +281,6 @@ export default function EditServiceScreen() {
     );
   }
 
-  // ERROR
-
   if (serviceQuery.isError || !service || !carId) {
     return (
       <View style={styles.center}>
@@ -369,14 +289,12 @@ export default function EditServiceScreen() {
           size={48}
           color={COLORS.blue}
         />
-
         <Text style={styles.errorTitle}>
           {tr(
             'Unable to load service',
             'Не удалось загрузить обслуживание',
           )}
         </Text>
-
         <Text style={styles.errorDescription}>
           {serviceQuery.error
             ? getErrorMessage(serviceQuery.error)
@@ -385,24 +303,19 @@ export default function EditServiceScreen() {
                 'Обслуживание не найдено.',
               )}
         </Text>
-
         <Pressable
           style={styles.errorButton}
-          onPress={() => {
-            void serviceQuery.refetch();
-          }}
+          onPress={() => void serviceQuery.refetch()}
         >
           <Ionicons
             name="refresh-outline"
             size={18}
             color={COLORS.navy}
           />
-
           <Text style={styles.errorButtonText}>
             {tr('Try again', 'Повторить')}
           </Text>
         </Pressable>
-
         <Pressable
           style={styles.goBackButton}
           onPress={() => router.back()}
@@ -418,11 +331,7 @@ export default function EditServiceScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={
-        Platform.OS === 'ios'
-          ? 'padding'
-          : undefined
-      }
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
         style={styles.scroll}
@@ -432,8 +341,6 @@ export default function EditServiceScreen() {
         keyboardDismissMode="on-drag"
         nestedScrollEnabled
       >
-        {/* HEADER */}
-
         <View style={styles.header}>
           <Pressable
             onPress={() => router.back()}
@@ -446,18 +353,11 @@ export default function EditServiceScreen() {
               color={COLORS.navy}
             />
           </Pressable>
-
           <Text style={styles.headerTitle}>
-            {tr(
-              'Edit Service',
-              'Редактировать ТО',
-            )}
+            {tr('Edit Service', 'Редактировать ТО')}
           </Text>
-
           <View style={styles.back} />
         </View>
-
-        {/* SERVICE SUMMARY */}
 
         <View style={styles.intro}>
           <View style={styles.introIcon}>
@@ -467,7 +367,6 @@ export default function EditServiceScreen() {
               color={COLORS.navy}
             />
           </View>
-
           <View style={styles.introText}>
             <Text
               style={styles.introTitle}
@@ -475,7 +374,6 @@ export default function EditServiceScreen() {
             >
               {service.title}
             </Text>
-
             <Text style={styles.introSubtitle}>
               {tr(
                 'Update service information and maintenance schedule',
@@ -485,22 +383,15 @@ export default function EditServiceScreen() {
           </View>
         </View>
 
-        {/* FORM */}
-
         <View style={styles.formCard}>
           <ServiceForm
             key={service.id}
+            showOwnService
             defaultValues={formValues(service)}
             submitLabel={
               updateMutation.isPending
-                ? tr(
-                    'Saving...',
-                    'Сохранение...',
-                  )
-                : tr(
-                    'Save Changes',
-                    'Сохранить изменения',
-                  )
+                ? tr('Saving...', 'Сохранение...')
+                : tr('Save Changes', 'Сохранить изменения')
             }
             beforeSubmit={
               <ServiceScheduleEditor

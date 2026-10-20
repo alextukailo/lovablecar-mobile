@@ -53,7 +53,8 @@
         {
           "cameraPermission": "LovableCar needs access to your camera to scan service documents."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

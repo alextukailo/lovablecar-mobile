@@ -27,6 +27,7 @@ type Props = {
   onScanDocument?: () => void;
   onChooseDocument?: () => void;
   beforeSubmit?: ReactNode;
+  showOwnService?: boolean;
 };
 
 const C = {
@@ -46,6 +47,7 @@ export default function ServiceForm({
   onScanDocument,
   onChooseDocument,
   beforeSubmit,
+  showOwnService = false,
 }: Props) {
   const { t, i18n } = useTranslation();
   const ru = i18n.resolvedLanguage?.startsWith('ru') ?? false;
@@ -55,9 +57,21 @@ export default function ServiceForm({
   const [tab, setTab] = useState<'manual' | 'scan'>('manual');
   const [currencyOpen, setCurrencyOpen] = useState(false);
 
+  const [ownService, setOwnService] = useState(
+    showOwnService &&
+      defaultValues.totalCost === '0' &&
+      !defaultValues.workshop,
+  );
+
+  const [previousCost, setPreviousCost] = useState(
+    defaultValues.totalCost,
+  );
+
   const {
     control,
     handleSubmit,
+    setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<ServiceFormValues>({
     resolver: zodResolver(
@@ -126,6 +140,28 @@ export default function ServiceForm({
     </View>
   );
 
+  const toggleOwnService = () => {
+    if (!ownService) {
+      setPreviousCost(getValues('totalCost'));
+
+      setValue('totalCost', '0', {
+        shouldValidate: true,
+      });
+
+      setValue('workshop', '', {
+        shouldValidate: true,
+      });
+
+      setCurrencyOpen(false);
+    } else {
+      setValue('totalCost', previousCost, {
+        shouldValidate: true,
+      });
+    }
+
+    setOwnService(!ownService);
+  };
+
   return (
     <View style={styles.root}>
       {/* TABS */}
@@ -167,8 +203,6 @@ export default function ServiceForm({
       </View>
 
       {tab === 'scan' ? (
-        /* SCAN TAB */
-
         <View style={styles.scanSection}>
           <View style={styles.scanIllustration}>
             <Ionicons
@@ -242,8 +276,6 @@ export default function ServiceForm({
           </Pressable>
         </View>
       ) : (
-        /* MANUAL TAB */
-
         <View style={styles.form}>
           {field(
             'date',
@@ -275,125 +307,159 @@ export default function ServiceForm({
             true,
           )}
 
-          {/* TOTAL COST */}
+          {/* OWN SERVICE CHECKBOX */}
 
-          <View style={styles.field}>
-            <Text style={styles.label}>
-              {tr('Total cost', 'Стоимость')}
-            </Text>
+          {showOwnService && (
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{
+                checked: ownService,
+              }}
+              onPress={toggleOwnService}
+              style={styles.ownServiceRow}
+            >
+              <Ionicons
+                name={
+                  ownService
+                    ? 'checkbox'
+                    : 'square-outline'
+                }
+                size={26}
+                color={C.navy}
+              />
 
-            <View style={styles.costRow}>
-              <View
-                style={[
-                  styles.inputBox,
-                  styles.costInput,
-                ]}
-              >
-                <Ionicons
-                  name="cash-outline"
-                  size={20}
-                  color={C.navy}
-                />
-
-                <Controller
-                  control={control}
-                  name="totalCost"
-                  render={({ field: f }) => (
-                    <TextInput
-                      value={f.value}
-                      onChangeText={f.onChange}
-                      onBlur={f.onBlur}
-                      keyboardType="decimal-pad"
-                      placeholder="0.00"
-                      placeholderTextColor={C.muted}
-                      style={styles.input}
-                    />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.ownServiceTitle}>
+                  {tr(
+                    'Own service',
+                    'Обслуживание своими силами',
                   )}
-                />
+                </Text>
+
+                <Text style={styles.ownServiceDescription}>
+                  {tr(
+                    'I performed this service myself',
+                    'Я выполнил обслуживание самостоятельно',
+                  )}
+                </Text>
               </View>
+            </Pressable>
+          )}
 
-              <Controller
-                control={control}
-                name="currency"
-                render={({ field: f }) => (
-                  <View style={styles.currencyWrapper}>
-                    <Pressable
-                      style={styles.currencyButton}
-                      onPress={() =>
-                        setCurrencyOpen(!currencyOpen)
-                      }
-                    >
-                      <Text style={styles.currencyText}>
-                        {f.value}
-                      </Text>
+          {/* COST AND WORKSHOP */}
 
-                      <Ionicons
-                        name={
-                          currencyOpen
-                            ? 'chevron-up'
-                            : 'chevron-down'
-                        }
-                        size={17}
-                        color={C.navy}
-                      />
-                    </Pressable>
+          {!ownService && (
+            <>
+              <View style={styles.field}>
+                <Text style={styles.label}>
+                  {tr('Total cost', 'Стоимость')}
+                </Text>
 
-                    {currencyOpen && (
-                      <View style={styles.currencyMenu}>
-                        {supportedCurrencyOptions.map(
-                          (option) => (
-                            <Pressable
-                              key={option.value}
-                              style={styles.currencyItem}
-                              onPress={() => {
-                                f.onChange(option.value);
-                                setCurrencyOpen(false);
-                              }}
-                            >
-                              <Text
-                                style={styles.currencyText}
-                              >
-                                {option.label}
-                              </Text>
-                            </Pressable>
-                          ),
+                <View style={styles.costRow}>
+                  <View
+                    style={[
+                      styles.inputBox,
+                      styles.costInput,
+                    ]}
+                  >
+                    <Ionicons
+                      name="cash-outline"
+                      size={20}
+                      color={C.navy}
+                    />
+
+                    <Controller
+                      control={control}
+                      name="totalCost"
+                      render={({ field: f }) => (
+                        <TextInput
+                          value={f.value}
+                          onChangeText={f.onChange}
+                          onBlur={f.onBlur}
+                          keyboardType="decimal-pad"
+                          placeholder="0.00"
+                          placeholderTextColor={C.muted}
+                          style={styles.input}
+                        />
+                      )}
+                    />
+                  </View>
+
+                  <Controller
+                    control={control}
+                    name="currency"
+                    render={({ field: f }) => (
+                      <View style={styles.currencyWrapper}>
+                        <Pressable
+                          style={styles.currencyButton}
+                          onPress={() =>
+                            setCurrencyOpen(!currencyOpen)
+                          }
+                        >
+                          <Text style={styles.currencyText}>
+                            {f.value}
+                          </Text>
+
+                          <Ionicons
+                            name={
+                              currencyOpen
+                                ? 'chevron-up'
+                                : 'chevron-down'
+                            }
+                            size={17}
+                            color={C.navy}
+                          />
+                        </Pressable>
+
+                        {currencyOpen && (
+                          <View style={styles.currencyMenu}>
+                            {supportedCurrencyOptions.map(
+                              (option) => (
+                                <Pressable
+                                  key={option.value}
+                                  style={styles.currencyItem}
+                                  onPress={() => {
+                                    f.onChange(option.value);
+                                    setCurrencyOpen(false);
+                                  }}
+                                >
+                                  <Text style={styles.currencyText}>
+                                    {option.label}
+                                  </Text>
+                                </Pressable>
+                              ),
+                            )}
+                          </View>
                         )}
                       </View>
                     )}
-                  </View>
+                  />
+                </View>
+
+                {errors.totalCost && (
+                  <Text style={styles.error}>
+                    {errors.totalCost.message}
+                  </Text>
                 )}
-              />
-            </View>
+              </View>
 
-            {errors.totalCost && (
-              <Text style={styles.error}>
-                {errors.totalCost.message}
-              </Text>
-            )}
-          </View>
-
-          {/* WORKSHOP */}
-
-          {field(
-            'workshop',
-            tr('Workshop', 'Автосервис'),
-            'business-outline',
-            tr(
-              'Workshop name',
-              'Название автосервиса',
-            ),
+              {field(
+                'workshop',
+                tr('Workshop', 'Автосервис'),
+                'business-outline',
+                tr(
+                  'Workshop name',
+                  'Название автосервиса',
+                ),
+              )}
+            </>
           )}
 
-          {/* MAINTENANCE SCHEDULE
-              This section is displayed only when
-              the parent screen supplies it.
-              It is INSIDE the manual form,
-              immediately before Save Changes.
-          */}
+          {/* MAINTENANCE SCHEDULE */}
 
           {beforeSubmit}
 
-          {/* SAVE CHANGES */}
+          {/* SAVE */}
 
           <Pressable
             style={[
@@ -401,9 +467,7 @@ export default function ServiceForm({
               isSubmitting && styles.disabled,
             ]}
             disabled={isSubmitting}
-            onPress={() =>
-              void handleSubmit(onSubmit)()
-            }
+            onPress={() => void handleSubmit(onSubmit)()}
           >
             {isSubmitting ? (
               <ActivityIndicator color={C.navy} />
@@ -533,6 +597,21 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: C.border,
+  },
+  ownServiceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 16,
+  },
+  ownServiceTitle: {
+    color: C.navy,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  ownServiceDescription: {
+    color: C.blue,
+    marginTop: 3,
   },
   saveButton: {
     width: '100%',
