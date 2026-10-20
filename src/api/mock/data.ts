@@ -1,5 +1,5 @@
-import { Car } from '@/types/car';
-import { ServiceRecord } from '@/types/service';
+import { Car } from '@/entities/car/model/car';
+import { ServiceRecord } from '@/entities/service/model/service';
 
 export const cars: Car[] = [
   {

@@ -5,7 +5,7 @@ import {
     useQueryClient,
 } from '@tanstack/react-query';
 
-import { useCarStore } from '../src/store/car.store';
+import { useCarStore } from '../src/entities/car/model/car.store';
 
 import {
     completeMaintenance,

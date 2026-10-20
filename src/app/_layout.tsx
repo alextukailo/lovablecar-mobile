@@ -1,6 +1,6 @@
 
-import { AuthProvider } from '@/auth/AuthContext';
-import AppSplashScreen from '@/components/AppSplashScreen';
+import { AuthProvider } from '@/features/auth/model/AuthContext';
+import AppSplashScreen from '@/shared/ui/AppSplashScreen';
 import { restoreLanguage } from '@/i18n';
 
 import {

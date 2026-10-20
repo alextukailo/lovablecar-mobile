@@ -3,8 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
-import en from './locales/en';
-import ru from './locales/ru';
+import en from '@/i18n/locales/en';
+import ru from '@/i18n/locales/ru';
 
 export type AppLanguage = 'en' | 'ru';
 

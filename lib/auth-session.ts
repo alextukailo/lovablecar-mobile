@@ -3,7 +3,7 @@ import {
     deleteSessionToken,
     getSessionToken as getStoredSessionToken,
     setSessionToken,
-} from '../src/auth/sessionStorage';
+} from '../src/features/auth/model/sessionStorage';
 
 const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
