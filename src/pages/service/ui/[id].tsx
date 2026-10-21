@@ -1,3 +1,4 @@
+import axios from 'axios';
 
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -5,15 +6,22 @@ import {
     useQuery,
     useQueryClient,
 } from '@tanstack/react-query';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as ImagePicker from 'expo-image-picker';
 import {
     router,
     useLocalSearchParams,
 } from 'expo-router';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     ActivityIndicator,
     Alert,
+    Image,
     ImageBackground,
+    Linking,
+    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -24,9 +32,23 @@ import {
 import { api } from '@/../lib/api';
 import { useCar } from '@/features/cars/model/useCars';
 
-// --------------------------------------------------
-// TYPES
-// --------------------------------------------------
+type ServiceAttachment = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+};
+
+type SelectedAttachment = {
+  uri: string;
+  name: string;
+  mimeType: string;
+  size: number;
+};
+
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'];
 
 type Schedule = {
   enabled: boolean;
@@ -75,18 +97,6 @@ const COLORS = {
   green: '#16834A',
 };
 
-// --------------------------------------------------
-// HELPERS
-// --------------------------------------------------
-
-function first(
-  value?: string | string[],
-): string | undefined {
-  return Array.isArray(value)
-    ? value[0]
-    : value;
-}
-
 function formatDate(
   value: string | null | undefined,
   locale: string,
@@ -110,10 +120,6 @@ function formatDate(
     timeZone: 'UTC',
   });
 }
-
-// --------------------------------------------------
-// DETAIL ROW
-// --------------------------------------------------
 
 type DetailRowProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -155,9 +161,61 @@ function DetailRow({
   );
 }
 
-// --------------------------------------------------
-// SCREEN
-// --------------------------------------------------
+
+type AttachmentTileProps = {
+  item: ServiceAttachment;
+  carId: string;
+  serviceId: string;
+  busy: boolean;
+  onOpen: () => void;
+  onDelete: () => void;
+};
+
+function AttachmentTile({ item, carId, serviceId, busy, onOpen, onDelete }: AttachmentTileProps) {
+  const isImage = item.mimeType.startsWith('image/');
+  const preview = useQuery({
+    queryKey: ['attachment-url', carId, serviceId, item.id],
+    enabled: isImage,
+    staleTime: 3 * 60 * 1000,
+    queryFn: async () => {
+      const { data } = await api.get<{ url: string }>(
+        `/cars/${carId}/services/${serviceId}/attachments/${item.id}/url`,
+      );
+      return data.url;
+    },
+  });
+
+  return (
+    <Pressable
+      style={styles.documentItem}
+      disabled={busy}
+      onPress={onOpen}
+      onLongPress={onDelete}
+      delayLongPress={500}
+    >
+      <View style={[styles.documentTile, styles.previewTile]}>
+        {busy ? (
+          <ActivityIndicator color={COLORS.blue} />
+        ) : isImage && preview.data ? (
+          <Image
+            source={{ uri: preview.data }}
+            style={styles.attachmentThumbnail}
+            resizeMode="cover"
+          />
+        ) : preview.isLoading && isImage ? (
+          <ActivityIndicator color={COLORS.blue} />
+        ) : (
+          <Ionicons
+            name={isImage ? 'image-outline' : 'document-text-outline'}
+            size={32}
+            color={COLORS.blue}
+          />
+        )}
+      </View>
+      <Text numberOfLines={2} style={styles.attachmentName}>{item.fileName}</Text>
+    </Pressable>
+  );
+}
 
 export default function ServiceDetailsScreen() {
   const { i18n } = useTranslation();
@@ -194,6 +252,12 @@ const routeCarId =
   first(params.vehicleId);
 
   const queryClient = useQueryClient();
+  const [uploading, setUploading] = useState(false);
+  const [attachmentBusyId, setAttachmentBusyId] = useState<string | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<ServiceAttachment | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
 
   const serviceQuery = useQuery({
     queryKey: [
@@ -231,6 +295,18 @@ const routeCarId =
 
   const service = serviceQuery.data;
 
+  const attachmentsQuery = useQuery({
+    queryKey: ['service-attachments', routeCarId || serviceQuery.data?.carId, serviceId],
+    enabled: Boolean(serviceId && (routeCarId || serviceQuery.data?.carId)),
+    queryFn: async (): Promise<ServiceAttachment[]> => {
+      const id = routeCarId || serviceQuery.data?.carId;
+      const { data } = await api.get<ServiceAttachment[]>(
+        `/cars/${id}/services/${serviceId}/attachments`,
+      );
+      return data;
+    },
+  });
+
   // Resolve carId from the loaded service when
   // it was not included in route parameters.
   const carId =
@@ -238,10 +314,6 @@ const routeCarId =
     routeCarId;
 
   const carQuery = useCar(carId);
-
-  // --------------------------------------------------
-  // DELETE SERVICE
-  // --------------------------------------------------
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -301,9 +373,6 @@ const routeCarId =
     },
   });
 
-  // --------------------------------------------------
-  // ACTIONS
-  // --------------------------------------------------
 
   const handleEdit = () => {
     if (!serviceId || !carId) {
@@ -372,6 +441,183 @@ const routeCarId =
     });
   };
 
+  const uploadAttachment = async (file: SelectedAttachment) => {
+    if (!carId || !serviceId || uploading) return;
+    if (!ACCEPTED_TYPES.includes(file.mimeType) || !Number.isInteger(file.size) ||
+        file.size <= 0 || file.size > MAX_ATTACHMENT_BYTES) {
+      Alert.alert(tr('Invalid file', 'Недопустимый файл'),
+        tr('Choose a JPG, PNG, WebP, HEIC, HEIF or PDF under 10 MB.',
+          'Выберите JPG, PNG, WebP, HEIC, HEIF или PDF размером до 10 МБ.'));
+      return;
+    }
+    setUploading(true);
+    let uploadStage: 'prepare' | 'storage' | 'confirm' = 'prepare';
+    try {
+      const base = `/cars/${carId}/services/${serviceId}/attachments`;
+      const payload = { fileName: file.name, mimeType: file.mimeType, size: file.size };
+      const { data: prepared } = await api.post<{ signedUrl: string; storageKey: string }>(
+        `${base}/upload-url`, payload,
+      );
+      // Signed URL is issued by the backend. Never send the backend secret to the app.
+      uploadStage = 'storage';
+      const info = await FileSystem.getInfoAsync(file.uri);
+      if (!info.exists || info.isDirectory || typeof info.size !== 'number') {
+        throw new Error('Cannot read selected file');
+      }
+      if (info.size !== file.size) {
+        throw new Error(`Local file size mismatch: expected ${file.size}, actual ${info.size}`);
+      }
+      const result = await FileSystem.uploadAsync(prepared.signedUrl, file.uri, {
+        httpMethod: 'PUT',
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: { 'Content-Type': file.mimeType },
+      });
+      if (result.status < 200 || result.status >= 300) {
+        throw new Error(`Storage upload failed (${result.status}): ${result.body.slice(0, 300)}`);
+      }
+      uploadStage = 'confirm';
+      await api.post(base, { ...payload, storageKey: prepared.storageKey });
+      await queryClient.invalidateQueries({ queryKey: ['service-attachments', carId, serviceId] });
+    } catch (error) {
+      let message = tr('Please try again.', 'Попробуйте ещё раз.');
+      if (axios.isAxiosError(error)) {
+        const response = error.response?.data;
+        const serverMessage = response?.message ?? response?.error;
+        message = Array.isArray(serverMessage)
+          ? serverMessage.join(', ')
+          : typeof serverMessage === 'string'
+            ? serverMessage
+            : error.message;
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      console.error('Attachment upload failed', { stage: uploadStage, message });
+      Alert.alert(tr('Upload failed', 'Ошибка загрузки'), `${uploadStage}: ${message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const chooseDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled) return;
+      const file = result.assets[0];
+      const info = await FileSystem.getInfoAsync(file.uri);
+      if (!info.exists || info.isDirectory || typeof info.size !== 'number') {
+        throw new Error('Cannot read selected document');
+      }
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      const mimeType = ext === 'heic' ? 'image/heic' : ext === 'heif' ? 'image/heif'
+        : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'png' ? 'image/png'
+        : ext === 'webp' ? 'image/webp' : ext === 'pdf' ? 'application/pdf'
+        : file.mimeType || 'application/octet-stream';
+      await uploadAttachment({
+        uri: file.uri, name: file.name,
+        mimeType,
+        size: info.size,
+      });
+    } catch {
+      Alert.alert(tr('Unable to select file', 'Не удалось выбрать файл'));
+    }
+  };
+
+  const choosePhoto = async (camera: boolean) => {
+    try {
+      if (camera) {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert(tr('Camera access required', 'Необходим доступ к камере'));
+          return;
+        }
+      }
+
+      const result = camera
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            quality: 1,
+            allowsEditing: false,
+          });
+
+      if (result.canceled || !result.assets.length) return;
+      const asset = result.assets[0];
+      const rawName = asset.fileName ?? '';
+      const extension = rawName.split('.').pop()?.toLowerCase();
+      const mimeType = extension === 'heic'
+        ? 'image/heic'
+        : extension === 'heif'
+          ? 'image/heif'
+          : asset.mimeType || 'image/jpeg';
+      const suffix = mimeType === 'image/heic' ? 'heic'
+        : mimeType === 'image/heif' ? 'heif'
+          : mimeType === 'image/png' ? 'png'
+            : mimeType === 'image/webp' ? 'webp' : 'jpg';
+      const name = rawName || `service-photo-${Date.now()}.${suffix}`;
+      const info = await FileSystem.getInfoAsync(asset.uri);
+      if (!info.exists || info.isDirectory || typeof info.size !== 'number') {
+        throw new Error('Cannot read selected photo');
+      }
+
+      await uploadAttachment({
+        uri: asset.uri,
+        name,
+        mimeType,
+        size: info.size,
+      });
+    } catch (error) {
+      console.error('Photo selection failed:', error);
+      Alert.alert(tr('Unable to select photo', 'Не удалось выбрать фото'),
+        error instanceof Error ? error.message : undefined);
+    }
+  };
+
+  const showAddOptions = () => {
+    Alert.alert(tr('Add attachment', 'Добавить вложение'), undefined, [
+      { text: tr('Camera', 'Камера'), onPress: () => void choosePhoto(true) },
+      { text: tr('Photo library', 'Галерея'), onPress: () => void choosePhoto(false) },
+      { text: tr('Files / PDF', 'Файлы / PDF'), onPress: () => void chooseDocument() },
+      { text: tr('Cancel', 'Отмена'), style: 'cancel' },
+    ]);
+  };
+
+  const openAttachment = async (item: ServiceAttachment) => {
+    if (!carId || !serviceId) return;
+    setPreviewAttachment(item);
+    setPreviewUrl(null);
+    setPreviewLoading(true);
+    try {
+      const { data } = await api.get<{ url: string }>(
+        `/cars/${carId}/services/${serviceId}/attachments/${item.id}/url`,
+      );
+      setPreviewUrl(data.url);
+    } catch {
+      setPreviewAttachment(null);
+      Alert.alert(tr('Cannot open attachment', 'Не удалось открыть вложение'));
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const deleteAttachment = (item: ServiceAttachment) => {
+    if (!carId || !serviceId) return;
+    Alert.alert(tr('Delete attachment?', 'Удалить вложение?'), item.fileName, [
+      { text: tr('Cancel', 'Отмена'), style: 'cancel' },
+      { text: tr('Delete', 'Удалить'), style: 'destructive', onPress: async () => {
+        setAttachmentBusyId(item.id);
+        try {
+          await api.delete(`/cars/${carId}/services/${serviceId}/attachments/${item.id}`);
+          await queryClient.invalidateQueries({ queryKey: ['service-attachments', carId, serviceId] });
+        } catch {
+          Alert.alert(tr('Could not delete attachment', 'Не удалось удалить вложение'));
+        } finally { setAttachmentBusyId(null); }
+      } },
+    ]);
+  };
+
   // --------------------------------------------------
   // EMPTY / LOADING / ERROR STATES
   // --------------------------------------------------
@@ -435,10 +681,6 @@ const routeCarId =
       </View>
     );
   }
-
-  // --------------------------------------------------
-  // DISPLAY VALUES
-  // --------------------------------------------------
 
   const cost =
     service.cost == null
@@ -597,28 +839,39 @@ const routeCarId =
         </Text>
 
         <View style={styles.documentRow}>
-          <View style={styles.documentTile}>
-            <Ionicons
-              name="document-text-outline"
-              size={32}
-              color={COLORS.muted}
-            />
-          </View>
-
-          <View style={styles.documentTile}>
-            <Ionicons
-              name="add"
-              size={32}
-              color="#A8C5DF"
-            />
-          </View>
+          {(attachmentsQuery.data ?? []).map((item) => (
+            carId && serviceId ? (
+              <AttachmentTile
+                key={item.id}
+                item={item}
+                carId={carId}
+                serviceId={serviceId}
+                busy={attachmentBusyId === item.id}
+                onOpen={() => void openAttachment(item)}
+                onDelete={() => deleteAttachment(item)}
+              />
+            ) : null
+          ))}
+          <Pressable style={styles.documentItem} onPress={showAddOptions} disabled={uploading}>
+            <View style={styles.documentTile}>
+              {uploading ? <ActivityIndicator color={COLORS.blue} /> : (
+                <Ionicons name="add" size={32} color={COLORS.blue} />
+              )}
+            </View>
+            <Text style={styles.attachmentName}>{tr('Add file', 'Добавить')}</Text>
+          </Pressable>
         </View>
-
+        {attachmentsQuery.isLoading && <ActivityIndicator color={COLORS.blue} />}
+        {attachmentsQuery.isError && (
+          <Pressable onPress={() => void attachmentsQuery.refetch()}>
+            <Text style={styles.helper}>{tr('Could not load attachments · Tap to retry', 'Не удалось загрузить вложения · Повторить')}</Text>
+          </Pressable>
+        )}
         <Text style={styles.helper}>
-          {tr(
-            'Attachments are not yet available for this service.',
-            'Вложения для этой записи пока недоступны.',
-          )}
+          {uploading
+            ? tr('Uploading attachment...', 'Загрузка вложения...')
+            : tr('JPG, PNG, WebP, HEIC, HEIF or PDF · max 10 MB. Tap to preview; hold to delete.',
+                 'JPG, PNG, WebP, HEIC, HEIF или PDF · до 10 МБ. Нажмите для просмотра; удерживайте для удаления.')}
         </Text>
       </View>
 
@@ -772,6 +1025,51 @@ const routeCarId =
               )}
         </Text>
       </Pressable>
+      <Modal
+        visible={previewAttachment !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewAttachment(null)}
+      >
+        <View style={styles.previewOverlay}>
+          <View style={styles.previewHeader}>
+            <Text style={styles.previewTitle} numberOfLines={1}>
+              {previewAttachment?.fileName ?? ''}
+            </Text>
+            <Pressable
+              onPress={() => setPreviewAttachment(null)}
+              style={styles.previewClose}
+              accessibilityLabel={tr('Close preview', 'Закрыть просмотр')}
+            >
+              <Ionicons name="close" size={28} color={COLORS.white} />
+            </Pressable>
+          </View>
+          <View style={styles.previewContent}>
+            {previewLoading ? (
+              <ActivityIndicator size="large" color={COLORS.white} />
+            ) : previewUrl && previewAttachment?.mimeType.startsWith('image/') ? (
+              <Image
+                source={{ uri: previewUrl }}
+                style={styles.fullPreviewImage}
+                resizeMode="contain"
+              />
+            ) : previewUrl ? (
+              <View style={styles.pdfPreview}>
+                <Ionicons name="document-text-outline" size={64} color={COLORS.white} />
+                <Text style={styles.pdfPreviewName}>{previewAttachment?.fileName}</Text>
+                <Pressable
+                  style={styles.pdfOpenButton}
+                  onPress={() => void Linking.openURL(previewUrl)}
+                >
+                  <Text style={styles.pdfOpenText}>
+                    {tr('Open PDF', 'Открыть PDF')}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -969,9 +1267,25 @@ const styles = StyleSheet.create({
 
   documentRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     marginTop: 15,
   },
+
+  documentItem: { width: 88, alignItems: 'center' },
+  attachmentName: { fontSize: 10, color: COLORS.navy, textAlign: 'center', marginTop: 5 },
+  previewTile: { overflow: 'hidden' },
+  attachmentThumbnail: { width: '100%', height: '100%' },
+  previewOverlay: { flex: 1, backgroundColor: 'rgba(7, 17, 32, 0.97)', paddingTop: 58 },
+  previewHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, gap: 16 },
+  previewTitle: { flex: 1, color: COLORS.white, fontSize: 15, fontWeight: '600' },
+  previewClose: { padding: 8 },
+  previewContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  fullPreviewImage: { width: '100%', height: '100%' },
+  pdfPreview: { alignItems: 'center', padding: 24, gap: 20 },
+  pdfPreviewName: { color: COLORS.white, fontSize: 16, textAlign: 'center' },
+  pdfOpenButton: { backgroundColor: COLORS.white, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
+  pdfOpenText: { color: COLORS.navy, fontWeight: '700' },
 
   documentTile: {
     width: 76,

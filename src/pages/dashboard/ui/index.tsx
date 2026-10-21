@@ -1,3 +1,4 @@
+
 import { C, styles } from '@/pages/dashboard/ui/index.styles';
 
 import { useQuery } from '@tanstack/react-query';
@@ -31,19 +32,18 @@ import {
 import { api } from '@/../lib/api';
 import { useCarMaintenanceSchedules } from '@/../lib/maintenance.queries';
 import { useAuth } from '@/features/auth/model/AuthContext';
-import { useProfileMenu } from '@/shared/ui/ProfileMenuContext';
+import { useCarPhoto } from '@/features/cars/model/useCarPhoto';
 import { useCars } from '@/features/cars/model/useCars';
+import { useProfileMenu } from '@/shared/ui/ProfileMenuContext';
 
 import {
     formatMaintenanceDeadline,
     getMaintenanceName,
 } from '@/features/maintenance/lib/maintenance-display';
 
+import { useCarStore } from '@/entities/car/model/car.store';
 import { calculateMaintenanceOverview } from '@/features/maintenance/lib/maintenance-overview';
 import { findNextMaintenance } from '@/features/maintenance/lib/next-maintenance';
-import { useCarStore } from '@/entities/car/model/car.store';
-
-
 
 const HEADER_HEIGHT = 64;
 
@@ -153,6 +153,7 @@ export default function HomeScreen() {
   const { openProfile } = useProfileMenu();
 
   const [avatarError, setAvatarError] = useState(false);
+  const [carImageError, setCarImageError] = useState(false);
 
   const photoUrl = user?.photoUrl || null;
 
@@ -201,6 +202,18 @@ export default function HomeScreen() {
     null;
 
   const carId = selectedCar?.id;
+
+  // CAR PHOTO
+
+  const {
+    data: carPhoto,
+  } = useCarPhoto(carId);
+
+  const carPhotoUrl = carPhoto?.url ?? null;
+
+  useEffect(() => {
+    setCarImageError(false);
+  }, [carPhotoUrl]);
 
   // SERVICES
 
@@ -391,12 +404,19 @@ export default function HomeScreen() {
             />
           </View>
 
+          {/* VEHICLE PHOTO */}
+
           <Image
-            source={require(
-              '../../../../assets/images/lovablecar-background.png'
-            )}
+            source={
+              carPhotoUrl && !carImageError
+                ? { uri: carPhotoUrl }
+                : require(
+                    '../../../../assets/images/lovablecar-background.png'
+                  )
+            }
             style={styles.vehicleImage}
             resizeMode="cover"
+            onError={() => setCarImageError(true)}
           />
 
           <View style={styles.vehicleFooter}>

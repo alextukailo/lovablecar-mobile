@@ -1,6 +1,8 @@
 
 
 import { AuthProvider } from '@/features/auth/model/AuthContext';
+import '@/i18n';
+import { restoreLanguage } from '@/i18n';
 import {
     QueryClient,
     QueryClientProvider,
@@ -10,6 +12,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
     ImageBackground,
@@ -35,7 +38,17 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 });
 
 export default function RootLayout() {
+  const { t } = useTranslation();
   const [imageReady, setImageReady] = useState(false);
+  const [languageReady, setLanguageReady] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    void restoreLanguage().finally(() => {
+      if (mounted) setLanguageReady(true);
+    });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     // The image is bundled locally, so no prefetch is required.
@@ -43,18 +56,18 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (imageReady) {
+    if (imageReady && languageReady) {
       SplashScreen.hideAsync().catch(() => {
         // Native splash may already be hidden.
       });
     }
-  }, [imageReady]);
+  }, [imageReady, languageReady]);
 
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <View style={styles.container}>
-          <Stack
+          {languageReady && <Stack
             screenOptions={{
               headerBackTitle: 'Back',
               headerTintColor: '#102647',
@@ -97,21 +110,21 @@ export default function RootLayout() {
             <Stack.Screen
               name="car/new"
               options={{
-                title: 'Add car',
+                title: t('carDetails.addCar', { defaultValue: 'Add car' }),
               }}
             />
 
             <Stack.Screen
               name="car/[id]"
               options={{
-                title: 'Car',
+                title: t('navigation.cars', { defaultValue: 'Car' }),
               }}
             />
 
             <Stack.Screen
               name="car/edit"
               options={{
-                title: 'Edit car',
+                title: t('carDetails.editCar', { defaultValue: 'Edit car' }),
               }}
             />
 
@@ -119,25 +132,24 @@ export default function RootLayout() {
             <Stack.Screen
               name="service/new"
               options={{
-                title: 'Add service',
+                title: t('carDetails.addService', { defaultValue: 'Add service' }),
               }}
             />
 
             <Stack.Screen
               name="service/[id]"
               options={{
-                title: 'Service details',
+                title: t('carDetails.serviceDetails', { defaultValue: 'Service details' }),
               }}
             />
 
             <Stack.Screen
               name="service/edit"
               options={{
-                title: 'Edit service',
+                title: t('carDetails.editService', { defaultValue: 'Edit service' }),
               }}
             />
 
-            {/* Reminders - FSD */}
             <Stack.Screen
               name="reminder/new"
               options={{
@@ -171,7 +183,7 @@ export default function RootLayout() {
                 headerShown: false,
               }}
             />
-          </Stack>
+          </Stack>}
 
           {!imageReady && (
             <ImageBackground
